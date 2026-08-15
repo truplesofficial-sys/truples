@@ -21,7 +21,28 @@ This repository contains the complete technical specifications, cryptographic pr
 - 📜 **Formal Protocol Specification**: [`docs/TRUPLES-RATCHET-SPEC.md`](docs/TRUPLES-RATCHET-SPEC.md)
 - 🧪 **Open Cryptographic Core & Test Suite**: [`src/crypto/truples-crypto.js`](src/crypto/truples-crypto.js) | [`tests/crypto.test.js`](tests/crypto.test.js)
 
-### 1.1 Commercial IP & Open Cryptographic Core Policy
+### 1.1 Verified Protocol Assurance Matrix
+
+```text
+Protocol Specification           ✓ Implemented (docs/TRUPLES-RATCHET-SPEC.md)
+Double Ratchet State Machine     ✓ Implemented (P-384 ECDH + Directional KDF)
+Strict Forward Secrecy           ✓ Implemented (Per-message KDF chain ratchet)
+Post-Compromise Security (PCS)   ✓ Implemented (Automated Ephemeral DH turn-taking)
+Header AAD Cryptographic Binding ✓ Implemented (AES-256-GCM authenticated metadata)
+Out-of-Order & Delayed Delivery  ✓ Implemented (Bounded skipped keys buffer)
+Strict Replay Attack Protection  ✓ Implemented (Bounded replay cache FIFO eviction)
+Encrypted Session Snapshots      ✓ Implemented (Full state + skipped/consumed keys)
+Hardware Monotonic Anti-Rollback ✓ Implemented (Persistent storage enclave counter)
+Persistent TOFU Identity Store   ✓ Implemented (Encrypted device-bound pinning)
+Truples 60-Digit Safety Number   ✓ Implemented (Lexicographical SHA-512^512 fingerprint)
+Deterministic Test Vectors       ✓ Implemented (Cross-language conformance suite)
+Adversarial State Fuzzing        ✓ Implemented (PRNG seed-reproducible property tests)
+Transactional Atomic Rollback    ✓ Implemented (State snapshot restoration on MAC failure)
+Formal Verification (Tamarin)    ☐ In Progress (Mathematical model specification)
+Independent Cryptographic Audit  ☐ Planned (External third-party firm review)
+```
+
+### 1.2 Commercial IP & Open Cryptographic Core Policy
 To protect commercial infrastructure and proprietary routing assets while guaranteeing 100% cryptographic verifiability:
 - **Client Cryptographic Engine**: Fully open-source under standard W3C WebCrypto primitives for independent mathematical auditing.
 - **Relay Infrastructure & Backend**: Maintained under a secure proprietary license to protect operational enclaves and prevent unauthorized commercial cloning.
