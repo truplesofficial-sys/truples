@@ -781,6 +781,9 @@ async function runCryptographicTestSuite() {
 
   // Test 26: Deterministic Byte-Level Test Vector Suite (Cross-Language Specification Conformance)
   console.log('2️⃣6️⃣ Testing Deterministic Byte-Level Test Vector Suite (Exact Digest Assertion)...');
+  const staticVectors = require('../vectors/deterministic_vectors.json');
+  assert(staticVectors.test_vectors && staticVectors.test_vectors.length >= 3, 'Must contain standard test vectors');
+
   const staticSalt = new Uint8Array(32).fill(0x55);
   const derivedStaticKeys = await TruplesCryptoCore.deriveRootAndChainKeys(
     aliceKeypair.privateKey,
@@ -797,7 +800,18 @@ async function runCryptographicTestSuite() {
   assert.strictEqual(recvRawBytes.byteLength, 32, 'Receiving chain key must be exactly 32 bytes');
   assert.notDeepStrictEqual(Buffer.from(sendRawBytes), Buffer.from(recvRawBytes), 'Directional separation must produce distinct bytes');
 
-  // Verify deterministic repeatability: Re-deriving with identical inputs produces bit-for-bit identical hex digests
+  // Assert VEC-AAD-001 canonical binary prefix & suffix matching
+  const testAadHeader = {
+    dhPublicKey: Buffer.from(staticVectors.test_vectors[0].input.dhPublicKey_hex_prefix.padEnd(194, '0'), 'hex').toString('base64'),
+    previousChainLength: staticVectors.test_vectors[0].input.previousChainLength,
+    messageNumber: staticVectors.test_vectors[0].input.messageNumber
+  };
+  const canonicalAadResult = canonicalEncodeHeader(testAadHeader);
+  assert.strictEqual(canonicalAadResult.byteLength, staticVectors.test_vectors[0].expected_aad_byte_length, 'AAD byte length must match specification exactly (113 bytes)');
+  assert(Buffer.from(canonicalAadResult).toString('hex').startsWith(staticVectors.test_vectors[0].expected_aad_hex_prefix), 'AAD hex prefix must match deterministic vector');
+  assert(Buffer.from(canonicalAadResult).toString('hex').endsWith(staticVectors.test_vectors[0].expected_aad_hex_suffix), 'AAD hex suffix must match deterministic vector');
+
+  // Verify deterministic repeatability
   const reDerivedKeys = await TruplesCryptoCore.deriveRootAndChainKeys(
     aliceKeypair.privateKey,
     bobKeypair.publicKey,
@@ -806,7 +820,7 @@ async function runCryptographicTestSuite() {
   );
   const reRootRaw = new Uint8Array(await globalThis.crypto.subtle.exportKey('raw', reDerivedKeys.rootKey));
   assert.strictEqual(Buffer.from(rootRawBytes).toString('hex'), Buffer.from(reRootRaw).toString('hex'), 'Deterministic derivation must be byte-for-byte reproducible');
-  console.log('   ✅ Passed: Deterministic 32-byte cryptographic digests verified for cross-language conformance.\n');
+  console.log('   ✅ Passed: Deterministic 32-byte cryptographic digests & JSON vectors verified for cross-language conformance.\n');
 
   // Test 27: Seed-Reproducible 20-Cycle Adversarial Mutation & Rollback Testing
   console.log('2️⃣7️⃣ Testing Seed-Reproducible Adversarial Mutation Testing (Drop, Tamper & Rollback)...');

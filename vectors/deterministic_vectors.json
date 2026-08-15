@@ -21,28 +21,26 @@
     },
     {
       "vector_id": "VEC-KDF-DIR-002",
-      "description": "Role-Aware Directional KDF Derivation (32-Byte Exact Digests)",
+      "description": "Role-Aware Directional KDF Exact 32-Byte Hex Digests",
       "input": {
         "salt_hex": "5555555555555555555555555555555555555555555555555555555555555555",
+        "shared_secret_hex": "333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333",
         "info_root": "Truples-Root-Key",
         "info_init_to_resp": "Truples-Chain-Initiator-To-Responder",
         "info_resp_to_init": "Truples-Chain-Responder-To-Initiator"
       },
-      "expected_root_key_bits": 256,
-      "expected_chain_key_bits": 256,
-      "directional_invariance": {
-        "initiator_send_equals_responder_recv": true,
-        "initiator_recv_equals_responder_send": true,
-        "initiator_send_not_equal_initiator_recv": true
-      }
+      "expected_root_key_hex": "1c75d2f8031957618170ba29e5407456a604c1249896bf80f5bb1324a74f19ad",
+      "expected_init_to_resp_chain_hex": "62f07800ae176576f818c02e271200cb9884a7e93b9de138e80cb6e80e85abaa",
+      "expected_resp_to_init_chain_hex": "1c625c71486b5d4c396595d86bf601d8bf4149192d91077e6161afbfa2a945c7"
     },
     {
       "vector_id": "VEC-SAFETY-003",
-      "description": "Truples 60-Digit Safety Number Canonical Fingerprint",
-      "algorithm": "SHA-512^512 over lexicographically sorted raw P-384 ECDSA keys",
-      "format": "12 groups of 5 decimal digits (71 characters including spaces)",
-      "validation_regex": "^(\\d{5} ){11}\\d{5}$",
-      "order_invariant_assert": "SafetyNumber(KeyA, KeyB) === SafetyNumber(KeyB, KeyA)"
+      "description": "Truples 60-Digit Safety Number Deterministic Output",
+      "input": {
+        "keyA_hex": "04010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101",
+        "keyB_hex": "04020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202"
+      },
+      "expected_safety_number": "53385 46115 27790 38241 17103 57872 35510 30683 14860 03583 17272 03972"
     }
   ]
 }
