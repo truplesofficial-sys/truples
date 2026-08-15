@@ -1,5 +1,5 @@
 /**
- * Truples Cryptographic Core Reference Implementation (v2.4)
+ * Truples Cryptographic Core Reference Implementation (v2.5)
  * 
  * Fully compatible with:
  * - W3C WebCrypto API (Browser & Node.js Universal Runtime, zero external dependencies)
@@ -7,7 +7,7 @@
  * - FIPS 186-4 (ECDSA over NIST P-384 with SHA-384 for MITM-resistant authenticated key exchange)
  * - RFC 5903 (ECDH over NIST P-384 curve)
  * - RFC 5869 (HKDF with HMAC-SHA256)
- * - Full Double Ratchet Core (Asymmetric DH Ratchet + Symmetric KDF Chain Ratchet)
+ * - Full Bidirectional Double Ratchet Core with Out-of-Order Skipped Message Key Handling
  */
 
 const cryptoSubtle = typeof window !== 'undefined' && window.crypto?.subtle 
@@ -104,11 +104,11 @@ export class TruplesCryptoCore {
   }
 
   /**
-   * Derives root and initial chain keys using HKDF-SHA256 with dynamic CSPRNG salt.
+   * Derives root and initial bidirectional chain keys using HKDF-SHA256 with dynamic CSPRNG salt.
    * @param {CryptoKey} localPrivateKey 
    * @param {CryptoKey} remotePublicKey 
    * @param {Uint8Array} [dynamicSalt] 
-   * @returns {Promise<{ rootKey: CryptoKey, chainKey: CryptoKey }>}
+   * @returns {Promise<{ rootKey: CryptoKey, sendingChainKey: CryptoKey, receivingChainKey: CryptoKey }>}
    */
   static async deriveRootAndChainKeys(localPrivateKey, remotePublicKey, dynamicSalt) {
     const salt = dynamicSalt || new Uint8Array(32);
@@ -128,7 +128,6 @@ export class TruplesCryptoCore {
       ['deriveKey', 'deriveBits']
     );
 
-    // Best-effort in-memory wipe of raw shared secret bits
     new Uint8Array(sharedBits).fill(0);
 
     const rootKey = await cryptoSubtle.deriveKey(
@@ -144,12 +143,12 @@ export class TruplesCryptoCore {
       ['sign']
     );
 
-    const chainKey = await cryptoSubtle.deriveKey(
+    const sendingChainKey = await cryptoSubtle.deriveKey(
       {
         name: 'HKDF',
         hash: 'SHA-256',
         salt: salt,
-        info: new TextEncoder().encode('Truples-Initial-Chain-Key-v2')
+        info: new TextEncoder().encode('Truples-Sending-Chain-Key-v2')
       },
       hkdfKey,
       { name: 'HMAC', hash: 'SHA-256', length: 256 },
@@ -157,18 +156,30 @@ export class TruplesCryptoCore {
       ['sign']
     );
 
-    return { rootKey, chainKey };
+    const receivingChainKey = await cryptoSubtle.deriveKey(
+      {
+        name: 'HKDF',
+        hash: 'SHA-256',
+        salt: salt,
+        info: new TextEncoder().encode('Truples-Receiving-Chain-Key-v2')
+      },
+      hkdfKey,
+      { name: 'HMAC', hash: 'SHA-256', length: 256 },
+      true,
+      ['sign']
+    );
+
+    return { rootKey, sendingChainKey, receivingChainKey, chainKey: sendingChainKey };
   }
 
   /**
    * Executes a MITM-resistant Authenticated Key Exchange (ECDH + ECDSA Identity Verification).
-   * Cryptographically verifies that the remote ephemeral ECDH public key was signed by the remote party's identity key.
    * @param {CryptoKey} localEcdhPrivateKey 
    * @param {CryptoKey} remoteEcdhPublicKey 
    * @param {CryptoKey} remoteEcdsaIdentityPublicKey 
    * @param {string} remoteSignatureBase64 
    * @param {Uint8Array} [dynamicSalt] 
-   * @returns {Promise<{ rootKey: CryptoKey, chainKey: CryptoKey }>}
+   * @returns {Promise<{ rootKey: CryptoKey, sendingChainKey: CryptoKey, receivingChainKey: CryptoKey }>}
    */
   static async deriveAuthenticatedRootAndChainKeys(
     localEcdhPrivateKey,
@@ -193,12 +204,12 @@ export class TruplesCryptoCore {
 
   /**
    * Executes an Asymmetric DH Ratchet Step upon conversational turn-taking (Post-Compromise Recovery).
-   * Ingests a new ephemeral ECDH shared secret to advance the Root Key and derive a new Sending/Receiving Chain.
+   * Derives a new Root Key and fresh bidirectional Sending/Receiving Chain Keys.
    * 
    * @param {CryptoKey} currentRootKey 
    * @param {CryptoKey} localNewEcdhPrivateKey 
    * @param {CryptoKey} remoteNewEcdhPublicKey 
-   * @returns {Promise<{ newRootKey: CryptoKey, newChainKey: CryptoKey }>}
+   * @returns {Promise<{ newRootKey: CryptoKey, newSendingChainKey: CryptoKey, newReceivingChainKey: CryptoKey, newChainKey: CryptoKey }>}
    */
   static async executeDhRatchetStep(currentRootKey, localNewEcdhPrivateKey, remoteNewEcdhPublicKey) {
     // 1. Calculate new ephemeral DH shared secret
@@ -219,7 +230,6 @@ export class TruplesCryptoCore {
       ['deriveKey', 'deriveBits']
     );
 
-    // Clean ephemeral memory
     new Uint8Array(newSharedBits).fill(0);
 
     // 3. Derive advanced Root Key
@@ -236,13 +246,27 @@ export class TruplesCryptoCore {
       ['sign']
     );
 
-    // 4. Derive fresh Chain Key for the new conversation turn
-    const newChainKey = await cryptoSubtle.deriveKey(
+    // 4. Derive fresh Sending Chain Key
+    const newSendingChainKey = await cryptoSubtle.deriveKey(
       {
         name: 'HKDF',
         hash: 'SHA-256',
         salt: new Uint8Array(rootKeyBytes),
-        info: new TextEncoder().encode('Truples-DH-Ratchet-Chain-Step')
+        info: new TextEncoder().encode('Truples-DH-Ratchet-Send-Chain')
+      },
+      hkdfKey,
+      { name: 'HMAC', hash: 'SHA-256', length: 256 },
+      true,
+      ['sign']
+    );
+
+    // 5. Derive fresh Receiving Chain Key
+    const newReceivingChainKey = await cryptoSubtle.deriveKey(
+      {
+        name: 'HKDF',
+        hash: 'SHA-256',
+        salt: new Uint8Array(rootKeyBytes),
+        info: new TextEncoder().encode('Truples-DH-Ratchet-Recv-Chain')
       },
       hkdfKey,
       { name: 'HMAC', hash: 'SHA-256', length: 256 },
@@ -252,7 +276,12 @@ export class TruplesCryptoCore {
 
     new Uint8Array(rootKeyBytes).fill(0);
 
-    return { newRootKey, newChainKey };
+    return { 
+      newRootKey, 
+      newSendingChainKey, 
+      newReceivingChainKey, 
+      newChainKey: newSendingChainKey 
+    };
   }
 
   /**
@@ -355,5 +384,58 @@ export class TruplesCryptoCore {
     buffer.fill(0xFF);
     cryptoRandom(buffer);
     buffer.fill(0x00);
+  }
+}
+
+/**
+ * Double Ratchet Session Manager with Out-of-Order Skipped Message Key Handling.
+ */
+export class DoubleRatchetSession {
+  constructor(rootKey, sendingChainKey, receivingChainKey) {
+    this.rootKey = rootKey;
+    this.sendingChainKey = sendingChainKey;
+    this.receivingChainKey = receivingChainKey;
+    this.sendSequence = 0;
+    this.recvSequence = 0;
+    this.skippedMessageKeys = new Map(); // Key: messageSeq, Value: CryptoKey (MessageKey)
+    this.maxSkip = 1000;
+  }
+
+  async send(plaintext) {
+    const { nextChainKey, messageKey } = await TruplesCryptoCore.ratchetMessageKey(this.sendingChainKey);
+    this.sendingChainKey = nextChainKey;
+    const seq = this.sendSequence++;
+    const encrypted = await TruplesCryptoCore.encryptPayload(plaintext, messageKey);
+    return { ...encrypted, seq };
+  }
+
+  async receive(iv, ciphertext, seq) {
+    // Case 1: Key already in skipped keys buffer (delayed out-of-order message arrival)
+    if (this.skippedMessageKeys.has(seq)) {
+      const messageKey = this.skippedMessageKeys.get(seq);
+      this.skippedMessageKeys.delete(seq);
+      return await TruplesCryptoCore.decryptPayload(iv, ciphertext, messageKey);
+    }
+
+    // Case 2: In-order or future out-of-order message
+    if (seq >= this.recvSequence) {
+      // Ratchet forward and buffer intermediate skipped keys
+      while (this.recvSequence < seq) {
+        if (this.skippedMessageKeys.size >= this.maxSkip) {
+          throw new Error('Skipped message keys limit exceeded');
+        }
+        const { nextChainKey, messageKey } = await TruplesCryptoCore.ratchetMessageKey(this.receivingChainKey);
+        this.receivingChainKey = nextChainKey;
+        this.skippedMessageKeys.set(this.recvSequence++, messageKey);
+      }
+
+      // Ratchet to current message key
+      const { nextChainKey, messageKey } = await TruplesCryptoCore.ratchetMessageKey(this.receivingChainKey);
+      this.receivingChainKey = nextChainKey;
+      this.recvSequence++;
+      return await TruplesCryptoCore.decryptPayload(iv, ciphertext, messageKey);
+    }
+
+    throw new Error('Duplicate or expired message key');
   }
 }

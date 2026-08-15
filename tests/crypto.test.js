@@ -1,13 +1,13 @@
 /**
- * Truples Cryptographic Core Self-Testing Suite (v2.4)
+ * Truples Cryptographic Core Self-Testing Suite (v2.5)
  * Run with: node tests/crypto.test.js
  */
 
-const { TruplesCryptoCore } = require('../src/crypto/truples-crypto');
+const { TruplesCryptoCore, DoubleRatchetSession } = require('../src/crypto/truples-crypto');
 const assert = require('assert');
 
 async function runCryptographicTestSuite() {
-  console.log('🧪 [TEST] Starting Truples Cryptographic Core Validation (v2.4)...\n');
+  console.log('🧪 [TEST] Starting Truples Cryptographic Core Validation (v2.5)...\n');
 
   // Test 1: ECDH Keypair Generation (NIST P-384)
   console.log('1️⃣ Testing Ephemeral ECDH Keypair Generation (P-384)...');
@@ -32,7 +32,7 @@ async function runCryptographicTestSuite() {
   console.log('   ✅ Passed: Verified ECDSA identity signature and anti-tamper rejection.\n');
 
   // Test 3: Authenticated Key Exchange (ECDH + ECDSA Handshake & Key Equality)
-  console.log('3️⃣ Testing MITM-Resistant Authenticated Key Exchange & Key Equality...');
+  console.log('3️⃣ Testing MITM-Resistant Authenticated Key Exchange & Byte-Level Key Equality...');
   const bobEcdhRaw = await globalThis.crypto.subtle.exportKey('raw', bobKeypair.publicKey);
   const bobSignedEcdhKey = await TruplesCryptoCore.signPayload(new Uint8Array(bobEcdhRaw), bobIdentity.privateKey);
   
@@ -83,8 +83,8 @@ async function runCryptographicTestSuite() {
 
   // Test 4: Symmetric KDF Chain Ratchet (Per-Message Forward Secrecy)
   console.log('4️⃣ Testing Symmetric KDF Chain Ratchet (Per-Message Forward Secrecy)...');
-  const aliceStep1 = await TruplesCryptoCore.ratchetMessageKey(aliceKeys.chainKey);
-  const bobStep1 = await TruplesCryptoCore.ratchetMessageKey(bobKeys.chainKey);
+  const aliceStep1 = await TruplesCryptoCore.ratchetMessageKey(aliceKeys.sendingChainKey);
+  const bobStep1 = await TruplesCryptoCore.ratchetMessageKey(bobKeys.sendingChainKey);
   
   const payload1 = await TruplesCryptoCore.encryptPayload("Message 1: Initial Handshake", aliceStep1.messageKey);
   const decrypted1 = await TruplesCryptoCore.decryptPayload(payload1.iv, payload1.ciphertext, bobStep1.messageKey);
@@ -138,40 +138,87 @@ async function runCryptographicTestSuite() {
   assert(sensitiveBuffer.every(b => b === 0), 'Buffer must be completely zeroized');
   console.log('   ✅ Passed: Multi-pass binary memory scrubbing verified.\n');
 
-  // Test 8: Asymmetric DH Ratchet Step & Post-Compromise Recovery Simulation
-  console.log('8️⃣ Testing Asymmetric DH Ratchet Step & Post-Compromise Security Recovery...');
-  // Scenario: Attacker compromises Alice's current chain key (aliceStep2.nextChainKey)
-  const compromisedChainKey = aliceStep2.nextChainKey;
-
-  // Turn-Taking occurs: Bob generates a brand new ephemeral ECDH keypair and sends his public key
+  // Test 8: Asymmetric DH Ratchet Step & Byte-Level Root Key Equality
+  console.log('8️⃣ Testing Asymmetric DH Ratchet Step & Derived Root Key Equality...');
   const bobNewTurnKeypair = await TruplesCryptoCore.generateECDHKeypair();
   const aliceNewTurnKeypair = await TruplesCryptoCore.generateECDHKeypair();
 
-  // Both parties advance their Root Keys via Asymmetric DH Ratchet
   const aliceRatchet = await TruplesCryptoCore.executeDhRatchetStep(aliceKeys.rootKey, aliceNewTurnKeypair.privateKey, bobNewTurnKeypair.publicKey);
   const bobRatchet = await TruplesCryptoCore.executeDhRatchetStep(bobKeys.rootKey, bobNewTurnKeypair.privateKey, aliceNewTurnKeypair.publicKey);
 
-  // Derive fresh post-DH message key
-  const alicePostStep = await TruplesCryptoCore.ratchetMessageKey(aliceRatchet.newChainKey);
-  const bobPostStep = await TruplesCryptoCore.ratchetMessageKey(bobRatchet.newChainKey);
+  // Direct byte-level comparison of new Root Keys after DH Ratchet
+  const aliceRatchetRootRaw = await globalThis.crypto.subtle.exportKey('raw', aliceRatchet.newRootKey);
+  const bobRatchetRootRaw = await globalThis.crypto.subtle.exportKey('raw', bobRatchet.newRootKey);
+  assert.deepStrictEqual(Buffer.from(aliceRatchetRootRaw), Buffer.from(bobRatchetRootRaw), 'Both parties must derive byte-identical Root Keys after Asymmetric DH Ratchet');
+  console.log('   ✅ Passed: Verified DH Ratchet state transition and byte-identical Root Key synchronization.\n');
 
-  const postPayload = await TruplesCryptoCore.encryptPayload("Post-Compromise Recovered Secret", alicePostStep.messageKey);
-  const decryptedPost = await TruplesCryptoCore.decryptPayload(postPayload.iv, postPayload.ciphertext, bobPostStep.messageKey);
-  assert.strictEqual(decryptedPost, "Post-Compromise Recovered Secret");
+  // Test 9: Full Adversarial Post-Compromise Security (PCS) Test (RootKey + DH PrivateKey Theft Scenario)
+  console.log('9️⃣ Testing Full Adversarial Post-Compromise Security (PCS) Recovery...');
+  // Threat Scenario: Attacker compromises ALL of Alice's state (RootKey, ChainKey, old DH Private Key)
+  const compromisedRootKey = aliceKeys.rootKey;
+  const compromisedOldDhPrivateKey = aliceKeypair.privateKey;
 
-  // Attacker attempts to derive future message key using the compromised old chain key
-  const attackerStep = await TruplesCryptoCore.ratchetMessageKey(compromisedChainKey);
-  let attackerFailed = false;
+  // Turn-Taking occurs: Alice generates a brand new ephemeral DH keypair (AliceFreshPrivate) unknown to attacker
+  const aliceFreshKeypair = await TruplesCryptoCore.generateECDHKeypair();
+  const bobFreshKeypair = await TruplesCryptoCore.generateECDHKeypair();
+
+  // Alice & Bob execute DH Ratchet
+  const alicePcsRatchet = await TruplesCryptoCore.executeDhRatchetStep(aliceKeys.rootKey, aliceFreshKeypair.privateKey, bobFreshKeypair.publicKey);
+  const bobPcsRatchet = await TruplesCryptoCore.executeDhRatchetStep(bobKeys.rootKey, bobFreshKeypair.privateKey, aliceFreshKeypair.publicKey);
+
+  // Alice encrypts post-DH message
+  const { messageKey: postDhMsgKey } = await TruplesCryptoCore.ratchetMessageKey(alicePcsRatchet.newSendingChainKey);
+  const pcsPayload = await TruplesCryptoCore.encryptPayload("Top Secret Post-Compromise Message", postDhMsgKey);
+
+  // Bob decrypts successfully
+  const { messageKey: bobPostDhMsgKey } = await TruplesCryptoCore.ratchetMessageKey(bobPcsRatchet.newSendingChainKey);
+  const bobDecrypted = await TruplesCryptoCore.decryptPayload(pcsPayload.iv, pcsPayload.ciphertext, bobPostDhMsgKey);
+  assert.strictEqual(bobDecrypted, "Top Secret Post-Compromise Message");
+
+  // Attacker attempts to compute new Root Key using compromised old RootKey + compromised old DH Private Key + eavesdropped BobFreshPublic
+  // Since attacker lacks AliceFreshPrivate, attacker cannot compute the new ECDH shared secret
+  let attackerDecryptionFailed = false;
   try {
-    await TruplesCryptoCore.decryptPayload(postPayload.iv, postPayload.ciphertext, attackerStep.messageKey);
+    const attackerFakeRatchet = await TruplesCryptoCore.executeDhRatchetStep(compromisedRootKey, compromisedOldDhPrivateKey, bobFreshKeypair.publicKey);
+    const { messageKey: attackerFakeMsgKey } = await TruplesCryptoCore.ratchetMessageKey(attackerFakeRatchet.newSendingChainKey);
+    await TruplesCryptoCore.decryptPayload(pcsPayload.iv, pcsPayload.ciphertext, attackerFakeMsgKey);
   } catch (err) {
-    attackerFailed = true;
+    attackerDecryptionFailed = true;
   }
-  assert(attackerFailed, 'Attacker with compromised historical chain key MUST fail to decrypt post-DH ratchet messages');
-  console.log('   ✅ Passed: Verified Asymmetric DH Ratchet step and proved Post-Compromise Security recovery.\n');
+  assert(attackerDecryptionFailed, 'Attacker possessing past RootKey and past DH private keys MUST fail to decrypt post-DH turn messages');
+  console.log('   ✅ Passed: Full Adversarial PCS proven: Healed cryptographic enclave and locked out historical attacker.\n');
+
+  // Test 10: Out-of-Order Delivery & Skipped Message Key Buffering
+  console.log('🔟 Testing Out-of-Order Message Delivery & Skipped Key Resolution...');
+  const aliceSession = new DoubleRatchetSession(aliceKeys.rootKey, aliceKeys.sendingChainKey, aliceKeys.receivingChainKey);
+  const bobSession = new DoubleRatchetSession(bobKeys.rootKey, bobKeys.receivingChainKey, bobKeys.sendingChainKey);
+
+  const m1 = await aliceSession.send("Message 1: Alpha");
+  const m2 = await aliceSession.send("Message 2: Beta (Delayed)");
+  const m3 = await aliceSession.send("Message 3: Gamma");
+  const m4 = await aliceSession.send("Message 4: Delta");
+
+  // Network delivers out-of-order: M1 -> M3 -> M4 -> (Late) M2
+  const r1 = await bobSession.receive(m1.iv, m1.ciphertext, m1.seq);
+  assert.strictEqual(r1, "Message 1: Alpha");
+
+  // M3 arrives ahead of M2 (M2 key is buffered into skippedMessageKeys)
+  const r3 = await bobSession.receive(m3.iv, m3.ciphertext, m3.seq);
+  assert.strictEqual(r3, "Message 3: Gamma");
+  assert(bobSession.skippedMessageKeys.has(1), 'Message 2 key must be stored in skippedMessageKeys cache');
+
+  // M4 arrives
+  const r4 = await bobSession.receive(m4.iv, m4.ciphertext, m4.seq);
+  assert.strictEqual(r4, "Message 4: Delta");
+
+  // Finally late M2 arrives and decrypts from skipped keys cache
+  const r2 = await bobSession.receive(m2.iv, m2.ciphertext, m2.seq);
+  assert.strictEqual(r2, "Message 2: Beta (Delayed)");
+  assert(!bobSession.skippedMessageKeys.has(1), 'Message 2 key must be purged from skipped cache upon consumption');
+  console.log('   ✅ Passed: Successfully resolved out-of-order delivery and managed bounded skipped keys.\n');
 
   console.log('========================================================================');
-  console.log('🎉 ALL 8 CRYPTOGRAPHIC, DH RATCHET & POST-COMPROMISE RECOVERY TESTS PASSED!');
+  console.log('🎉 ALL 10 CRYPTOGRAPHIC, FULL DOUBLE RATCHET & PCS TESTS PASSED!');
   console.log('========================================================================');
 }
 

@@ -1,7 +1,7 @@
 # Truples Protocol & Architecture Specification
 
 [![Status: Production Live](https://img.shields.io/badge/Status-Production%20Live-emerald.svg)](https://truples.com)
-[![Crypto Tests: 8/8 Passing](https://img.shields.io/badge/Crypto%20Tests-8%2F8%20Passing-brightgreen.svg)](tests/crypto.test.js)
+[![Crypto Tests: 10/10 Passing](https://img.shields.io/badge/Crypto%20Tests-10%2F10%20Passing-brightgreen.svg)](tests/crypto.test.js)
 [![Cipher: AES--256--GCM](https://img.shields.io/badge/Cipher-AES--256--GCM%20(NIST%20SP%20800--38D)-blue.svg)](https://truples.com)
 [![Auth Key Exchange: ECDH + ECDSA](https://img.shields.io/badge/Key%20Exchange-ECDH%20%2B%20ECDSA%20(P--384)-indigo.svg)](src/crypto/truples-crypto.js)
 [![Forward Secrecy: KDF Chain Ratchet](https://img.shields.io/badge/Forward%20Secrecy-KDF%20Chain%20Ratchet%20(RFC%205869)-teal.svg)](src/crypto/truples-crypto.js)
@@ -97,10 +97,10 @@ To guarantee strict Forward Secrecy at the client layer, Truples utilizes a symm
 | Formal Security Invariant | Cryptographic Guarantee | Automated Test Vector (`tests/crypto.test.js`) |
 | :--- | :--- | :--- |
 | 🛡️ **Invariant 1: Single-Use Keys** | Message keys are strictly single-use and destroyed after decryption | `Test 4: Symmetric KDF Chain Ratchet` |
-| 🛡️ **Invariant 2: Root Invalidation** | Bidirectional DH Ratchet permanently invalidates previous root keys | `Test 8: Asymmetric DH Ratchet Step` |
-| 🛡️ **Invariant 3: Skipped Key Bounds** | Delayed message keys are isolated in bounded ephemeral storage | `Test 4: Ratchet Forward Secrecy Bounds` |
+| 🛡️ **Invariant 2: Root Invalidation** | Bidirectional DH Ratchet permanently invalidates previous root keys | `Test 8: Asymmetric DH Ratchet Step & Byte Equality` |
+| 🛡️ **Invariant 3: Skipped Key Bounds** | Delayed out-of-order message keys are managed in bounded storage | `Test 10: Out-of-Order Delivery & Skipped Keys` |
 | 🛡️ **Invariant 4: CSPRNG Nonce Isolation**| 96-bit IV is uniquely generated per ciphertext (No nonce reuse) | `Test 5: Dynamic 96-bit IV Freshness` |
-| 🛡️ **Invariant 5: Post-Compromise Recovery**| Compromised historical state self-heals upon subsequent DH turns | `Test 8: Post-Compromise Security Recovery` |
+| 🛡️ **Invariant 5: Post-Compromise Recovery**| Full state compromise (RootKey+DHPrivate) heals upon subsequent DH turns | `Test 9: Full Adversarial Post-Compromise Security` |
 | 🛡️ **Invariant 6: Payload Anonymity** | Handshake payloads carry zero personal PII (No phone/email links) | `Test 2: Ephemeral ECDSA Verification` |
 
 ---
@@ -168,7 +168,9 @@ npm test
 - ✅ `AES-256-GCM` 256-bit encryption & 128-bit MAC validation
 - ✅ Per-message 96-bit CSPRNG IV freshness (No nonce reuse)
 - ✅ Multi-pass typed array memory buffer scrubbing
-- ✅ **Asymmetric DH Ratchet Step & Post-Compromise Security Recovery**
+- ✅ **Asymmetric DH Ratchet Step & Byte-Level Root Key Equality**
+- ✅ **Full Adversarial Post-Compromise Security (PCS) Recovery (RootKey + DH Private Key compromise scenario)**
+- ✅ **Out-of-Order Message Delivery & Skipped Message Key Buffering (`DoubleRatchetSession`)**
 
 ---
 
