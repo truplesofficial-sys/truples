@@ -4,7 +4,8 @@
   "description": "Reference Cryptographic Specification & Core Implementation for Truples E2EE Protocol",
   "main": "src/crypto/truples-crypto.js",
   "scripts": {
-    "test": "node tests/crypto.test.js"
+    "test": "node tests/crypto.test.js",
+    "verify": "node scripts/verify_all.js"
   },
   "keywords": [
     "e2ee",
