@@ -167,25 +167,26 @@ npm test
 ```
 
 ### Validated Test Vectors (`tests/crypto.test.js`):
+The protocol core is validated against 19 adversarial and protocol-level test vectors covering defined threat models:
 - ✅ `ECDH P-384` ephemeral keypair generation (RFC 5903)
 - ✅ `ECDSA P-384 / SHA-384` identity signing & anti-tamper verification (FIPS 186-4)
 - ✅ **MITM-Resistant Authenticated Key Exchange** verifying ECDSA signature on remote ECDH public key
 - ✅ **Symmetric KDF Chain Ratchet** ensuring distinct message keys per transmission and verifying forward secrecy
 - ✅ `AES-256-GCM` 256-bit encryption & 128-bit MAC validation
 - ✅ Per-message 96-bit CSPRNG IV freshness (No nonce reuse)
-- ✅ Multi-pass typed array memory buffer scrubbing
+- ✅ Best-effort multi-pass typed array memory buffer scrubbing
 - ✅ **Asymmetric DH Ratchet Step & Byte-Level Root Key Equality**
-- ✅ **Full Adversarial Post-Compromise Security (PCS) Recovery (RootKey + DH Private Key compromise scenario)**
+- ✅ **Adversarial Post-Compromise Security (PCS) Recovery**
 - ✅ **Out-of-Order Message Delivery & Skipped Message Key Buffering (`DoubleRatchetSession`)**
 - ✅ **True Bidirectional Double Ratchet Messaging (`Alice <-> Bob` role-aware chain alignment)**
 - ✅ **Automated Header-Driven Asymmetric DH Ratchet Turn-Taking State Machine**
 - ✅ **Multi-Epoch Out-of-Order Delivery Across Consecutive DH Ratchet Boundaries**
 - ✅ **Double Ratchet Header Tamper Rejection via AES-GCM AAD Binding**
-- ✅ **Strict Replay Attack Protection (Duplicate Transmission Rejection)**
+- ✅ **Strict Replay Attack Protection (Bounded Replay Cache FIFO Eviction)**
 - ✅ **Negative Protocol Security & Malformed Input Bounds (Strict P-384 Point & Integer Range Verification)**
 - ✅ **Full Adversarial PCS Compromise Timeline (Post-Turn Healing Boundary)**
 - ✅ **Multi-Turn Continuous Automated Ephemeral DH Ratchet (10 Turns)**
-- ✅ **Arbitrary Multi-Epoch Packet Permutation Stress Test (Interleaved Shuffled Delivery)**
+- ✅ **Adversarial Multi-Epoch Packet Permutation Stress Test (Interleaved Shuffled Delivery)**
 
 ---
 
