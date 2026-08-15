@@ -1,7 +1,7 @@
 # Truples Protocol & Architecture Specification
 
 [![Status: Production Live](https://img.shields.io/badge/Status-Production%20Live-emerald.svg)](https://truples.com)
-[![Crypto Tests: 13/13 Passing](https://img.shields.io/badge/Crypto%20Tests-13%2F13%20Passing-brightgreen.svg)](tests/crypto.test.js)
+[![Crypto Tests: 15/15 Passing](https://img.shields.io/badge/Crypto%20Tests-15%2F15%20Passing-brightgreen.svg)](tests/crypto.test.js)
 [![Cipher: AES--256--GCM](https://img.shields.io/badge/Cipher-AES--256--GCM%20(NIST%20SP%20800--38D)-blue.svg)](https://truples.com)
 [![Auth Key Exchange: ECDH + ECDSA](https://img.shields.io/badge/Key%20Exchange-ECDH%20%2B%20ECDSA%20(P--384)-indigo.svg)](src/crypto/truples-crypto.js)
 [![Forward Secrecy: KDF Chain Ratchet](https://img.shields.io/badge/Forward%20Secrecy-KDF%20Chain%20Ratchet%20(RFC%205869)-teal.svg)](src/crypto/truples-crypto.js)
@@ -102,6 +102,8 @@ To guarantee strict Forward Secrecy at the client layer, Truples utilizes a symm
 | 🛡️ **Invariant 4: CSPRNG Nonce Isolation**| 96-bit IV is uniquely generated per ciphertext (No nonce reuse) | `Test 5: Dynamic 96-bit IV Freshness` |
 | 🛡️ **Invariant 5: Post-Compromise Recovery**| Full state compromise (RootKey+DHPrivate) heals upon subsequent DH turns | `Test 9 & 12: Full Adversarial PCS & Automated DH Ratchet` |
 | 🛡️ **Invariant 6: Payload Anonymity** | Handshake payloads carry zero personal PII (No phone/email links) | `Test 2: Ephemeral ECDSA Verification` |
+| 🛡️ **Invariant 7: Header Authenticity** | Double Ratchet headers are cryptographically sealed via AES-GCM AAD | `Test 14: Header Tamper Rejection via AAD Binding` |
+| 🛡️ **Invariant 8: Replay Rejection** | Duplicate or previously consumed message transmissions are rejected | `Test 15: Strict Replay Attack Protection` |
 
 ---
 
@@ -174,6 +176,8 @@ npm test
 - ✅ **True Bidirectional Double Ratchet Messaging (`Alice <-> Bob` role-aware chain alignment)**
 - ✅ **Automated Header-Driven Asymmetric DH Ratchet Turn-Taking State Machine**
 - ✅ **Multi-Epoch Out-of-Order Delivery Across Consecutive DH Ratchet Boundaries**
+- ✅ **Double Ratchet Header Tamper Rejection via AES-GCM AAD Binding**
+- ✅ **Strict Replay Attack Protection (Duplicate Transmission Rejection)**
 
 ---
 

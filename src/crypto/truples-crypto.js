@@ -1,5 +1,5 @@
 /**
- * Truples Cryptographic Core & Full Double Ratchet State Machine (v2.6)
+ * Truples Cryptographic Core & Full Double Ratchet State Machine (v2.7)
  * 
  * Fully compatible with:
  * - W3C WebCrypto API (Browser & Node.js Universal Runtime, zero external dependencies)
@@ -8,9 +8,11 @@
  * - RFC 5903 (ECDH over NIST P-384 curve)
  * - RFC 5869 (HKDF with HMAC-SHA256)
  * - Signal-Standard Full Double Ratchet Specification:
+ *   - AAD-Authenticated Header Binding (Protects dhPublicKey, messageNumber, previousChainLength against tampering)
+ *   - Atomic Transactional State Rollback on Decryption / Tamper Failure (Prevents State Pollution / DoS)
  *   - Role-Aware Initiator / Responder Directional Chain Alignment
- *   - Header-Driven Automatic Ephemeral DH Ratchet State Machine
- *   - Multi-Epoch Bounded Skipped Message Key Management
+ *   - Automated Ephemeral DH Ratchet State Machine
+ *   - Multi-Epoch Bounded Skipped Message Key Management & Strict Replay Attack Protection
  */
 
 const cryptoSubtle = typeof window !== 'undefined' && window.crypto?.subtle 
@@ -45,6 +47,26 @@ function base64ToBytes(base64) {
     bytes[i] = binaryString.charCodeAt(i);
   }
   return bytes;
+}
+
+/**
+ * Deterministic Canonical Serialization of Double Ratchet Headers for AES-GCM AAD Authentication.
+ * Binary format: [4-byte version] [4-byte pubKeyLength] [pubKeyBytes] [4-byte prevChainLength] [4-byte messageNum]
+ */
+export function canonicalEncodeHeader(header) {
+  const pubKeyBytes = typeof header.dhPublicKey === 'string' ? base64ToBytes(header.dhPublicKey) : header.dhPublicKey;
+  const buffer = new ArrayBuffer(4 + 4 + pubKeyBytes.byteLength + 4 + 4);
+  const view = new DataView(buffer);
+
+  view.setUint32(0, 1, false); // Version 1
+  view.setUint32(4, pubKeyBytes.byteLength, false);
+  new Uint8Array(buffer, 8, pubKeyBytes.byteLength).set(pubKeyBytes);
+
+  const offset = 8 + pubKeyBytes.byteLength;
+  view.setUint32(offset, header.previousChainLength || 0, false);
+  view.setUint32(offset + 4, header.messageNumber || 0, false);
+
+  return new Uint8Array(buffer);
 }
 
 export class TruplesCryptoCore {
@@ -108,8 +130,6 @@ export class TruplesCryptoCore {
 
   /**
    * Derives root and role-aligned directional chain keys using HKDF-SHA256.
-   * Initiator and Responder derive symmetrically opposed sending and receiving chains.
-   * 
    * @param {CryptoKey} localPrivateKey 
    * @param {CryptoKey} remotePublicKey 
    * @param {Uint8Array} [dynamicSalt] 
@@ -184,13 +204,6 @@ export class TruplesCryptoCore {
 
   /**
    * Executes a MITM-resistant Authenticated Key Exchange (ECDH + ECDSA Identity Verification).
-   * @param {CryptoKey} localEcdhPrivateKey 
-   * @param {CryptoKey} remoteEcdhPublicKey 
-   * @param {CryptoKey} remoteEcdsaIdentityPublicKey 
-   * @param {string} remoteSignatureBase64 
-   * @param {Uint8Array} [dynamicSalt] 
-   * @param {'initiator'|'responder'} [role='initiator']
-   * @returns {Promise<{ rootKey: CryptoKey, sendingChainKey: CryptoKey, receivingChainKey: CryptoKey }>}
    */
   static async deriveAuthenticatedRootAndChainKeys(
     localEcdhPrivateKey,
@@ -216,15 +229,8 @@ export class TruplesCryptoCore {
 
   /**
    * Executes an Asymmetric DH Ratchet Step upon conversational turn-taking (Post-Compromise Recovery).
-   * Derives a new Root Key and fresh Chain Key using domain-separated HKDF.
-   * 
-   * @param {CryptoKey} currentRootKey 
-   * @param {CryptoKey} localDhPrivateKey 
-   * @param {CryptoKey} remoteDhPublicKey 
-   * @param {string} [chainInfo='Truples-DH-Ratchet-Chain-Step']
-   * @returns {Promise<{ newRootKey: CryptoKey, newChainKey: CryptoKey }>}
    */
-  static async executeDhRatchetStep(currentRootKey, localDhPrivateKey, remoteDhPublicKey, chainInfo = 'Truples-DH-Ratchet-Chain-Step') {
+  static async executeDhRatchetStep(currentRootKey, localDhPrivateKey, remoteDhPublicKey) {
     const newSharedBits = await cryptoSubtle.deriveBits(
       { name: 'ECDH', public: remoteDhPublicKey },
       localDhPrivateKey,
@@ -261,7 +267,7 @@ export class TruplesCryptoCore {
         name: 'HKDF',
         hash: 'SHA-256',
         salt: new Uint8Array(rootKeyBytes),
-        info: new TextEncoder().encode(chainInfo)
+        info: new TextEncoder().encode('Truples-DH-Ratchet-Chain-Step')
       },
       hkdfKey,
       { name: 'HMAC', hash: 'SHA-256', length: 256 },
@@ -281,8 +287,6 @@ export class TruplesCryptoCore {
 
   /**
    * Executes a symmetric KDF Chain Ratchet step (Per-Message Forward Secrecy).
-   * @param {CryptoKey} currentChainKey 
-   * @returns {Promise<{ nextChainKey: CryptoKey, messageKey: CryptoKey }>}
    */
   static async ratchetMessageKey(currentChainKey) {
     const chainKeyData = await cryptoSubtle.exportKey('raw', currentChainKey);
@@ -326,18 +330,20 @@ export class TruplesCryptoCore {
   }
 
   /**
-   * Encrypts plaintext using AES-256-GCM with a fresh 96-bit CSPRNG IV.
-   * @param {string|Uint8Array} plaintext 
-   * @param {CryptoKey} messageKey 
-   * @returns {Promise<{ iv: string, ciphertext: string }>} Base64 encoded payload
+   * Encrypts plaintext using AES-256-GCM with a fresh 96-bit CSPRNG IV and optional AAD.
    */
-  static async encryptPayload(plaintext, messageKey) {
+  static async encryptPayload(plaintext, messageKey, additionalData) {
     const rawData = typeof plaintext === 'string' ? new TextEncoder().encode(plaintext) : plaintext;
     const iv = new Uint8Array(12);
     cryptoRandom(iv);
 
+    const gcmParams = { name: 'AES-GCM', iv: iv, tagLength: 128 };
+    if (additionalData) {
+      gcmParams.additionalData = additionalData;
+    }
+
     const encryptedBuffer = await cryptoSubtle.encrypt(
-      { name: 'AES-GCM', iv: iv, tagLength: 128 },
+      gcmParams,
       messageKey,
       rawData
     );
@@ -349,18 +355,19 @@ export class TruplesCryptoCore {
   }
 
   /**
-   * Decrypts and authenticates AES-256-GCM ciphertext payload with 128-bit MAC tag validation.
-   * @param {string} ivBase64 
-   * @param {string} ciphertextBase64 
-   * @param {CryptoKey} messageKey 
-   * @returns {Promise<string>} Decrypted UTF-8 plaintext
+   * Decrypts and authenticates AES-256-GCM ciphertext payload with 128-bit MAC tag and optional AAD validation.
    */
-  static async decryptPayload(ivBase64, ciphertextBase64, messageKey) {
+  static async decryptPayload(ivBase64, ciphertextBase64, messageKey, additionalData) {
     const iv = base64ToBytes(ivBase64);
     const ciphertext = base64ToBytes(ciphertextBase64);
 
+    const gcmParams = { name: 'AES-GCM', iv: iv, tagLength: 128 };
+    if (additionalData) {
+      gcmParams.additionalData = additionalData;
+    }
+
     const decryptedBuffer = await cryptoSubtle.decrypt(
-      { name: 'AES-GCM', iv: iv, tagLength: 128 },
+      gcmParams,
       messageKey,
       ciphertext
     );
@@ -370,7 +377,6 @@ export class TruplesCryptoCore {
 
   /**
    * Best-effort in-memory buffer scrubbing for typed arrays.
-   * @param {Uint8Array} buffer 
    */
   static zeroizeBuffer(buffer) {
     if (!buffer || !buffer.length) return;
@@ -383,7 +389,7 @@ export class TruplesCryptoCore {
 
 /**
  * Signal-Standard Full Double Ratchet Session State Machine
- * Integrates Asymmetric DH Ratchet, Directional Symmetric KDF Chains, and Multi-Epoch Skipped Keys.
+ * Integrates AAD-Authenticated Headers, Asymmetric DH Ratchets, Directional KDF Chains, and Multi-Epoch Skipped Keys.
  */
 export class DoubleRatchetSession {
   constructor({
@@ -391,17 +397,20 @@ export class DoubleRatchetSession {
     sendingChainKey,
     receivingChainKey,
     localDhKeypair,
-    remoteDhPublicKey
+    remoteDhPublicKey,
+    role = 'initiator'
   }) {
     this.rootKey = rootKey;
     this.sendingChainKey = sendingChainKey;
     this.receivingChainKey = receivingChainKey;
     this.localDhKeypair = localDhKeypair;
     this.remoteDhPublicKey = remoteDhPublicKey;
+    this.role = role;
     this.messageNumber = 0;
     this.previousChainLength = 0;
     this.recvMessageNumber = 0;
-    this.skippedMessageKeys = new Map(); // Key: `${dhFingerprint}:${messageNumber}`, Value: CryptoKey
+    this.consumedMessageKeys = new Set(); // Replay Protection Cache
+    this.skippedMessageKeys = new Map();  // Key: `${dhFingerprint}:${messageNumber}`, Value: CryptoKey
     this.maxSkip = 1000;
   }
 
@@ -415,20 +424,19 @@ export class DoubleRatchetSession {
    */
   async rotateLocalDhKeypair() {
     this.localDhKeypair = await TruplesCryptoCore.generateECDHKeypair();
-    const { newRootKey, newChainKey } = await TruplesCryptoCore.executeDhRatchetStep(
+    const { newRootKey, newSendingChainKey } = await TruplesCryptoCore.executeDhRatchetStep(
       this.rootKey,
       this.localDhKeypair.privateKey,
-      this.remoteDhPublicKey,
-      'Truples-DH-Ratchet-Chain-Step'
+      this.remoteDhPublicKey
     );
     this.rootKey = newRootKey;
-    this.sendingChainKey = newChainKey;
+    this.sendingChainKey = newSendingChainKey;
     this.previousChainLength = this.messageNumber;
     this.messageNumber = 0;
   }
 
   /**
-   * Sends an encrypted message encapsulating the current Double Ratchet Header.
+   * Sends an encrypted message encapsulating the Double Ratchet Header bound via AES-GCM AAD.
    * @param {string} plaintext 
    * @returns {Promise<{ header: object, iv: string, ciphertext: string }>}
    */
@@ -443,12 +451,15 @@ export class DoubleRatchetSession {
       messageNumber: this.messageNumber++
     };
 
-    const encrypted = await TruplesCryptoCore.encryptPayload(plaintext, messageKey);
+    const aad = canonicalEncodeHeader(header);
+    const encrypted = await TruplesCryptoCore.encryptPayload(plaintext, messageKey, aad);
     return { header, ...encrypted, seq: header.messageNumber };
   }
 
   /**
-   * Receives and decrypts a Double Ratchet message, automatically executing a DH Ratchet step upon key rotation.
+   * Receives and decrypts a Double Ratchet message with AAD header authentication, replay rejection, and automatic DH ratchets.
+   * Features transactional rollback on authentication failure to prevent DoS/state corruption.
+   * 
    * @param {object} header 
    * @param {string} iv 
    * @param {string} ciphertext 
@@ -459,63 +470,92 @@ export class DoubleRatchetSession {
     const remoteDhFingerprint = header.dhPublicKey.substring(0, 24);
     const keyId = `${remoteDhFingerprint}:${header.messageNumber}`;
 
+    // Replay Attack Protection: Reject already consumed message keys
+    if (this.consumedMessageKeys.has(keyId)) {
+      throw new Error('Replay Attack Detected: Message key already consumed');
+    }
+
+    const aad = canonicalEncodeHeader(header);
+
     // Case 1: Check skipped keys buffer (Delayed out-of-order message)
     if (this.skippedMessageKeys.has(keyId)) {
       const messageKey = this.skippedMessageKeys.get(keyId);
+      const plaintext = await TruplesCryptoCore.decryptPayload(iv, ciphertext, messageKey, aad);
       this.skippedMessageKeys.delete(keyId);
-      return await TruplesCryptoCore.decryptPayload(iv, ciphertext, messageKey);
+      this.consumedMessageKeys.add(keyId);
+      return plaintext;
     }
 
-    // Check if remote party rotated their Ephemeral DH Key (New DH Ratchet Turn)
-    const currentRemoteFingerprint = this.remoteDhPublicKey 
-      ? await DoubleRatchetSession.getPublicKeyFingerprint(this.remoteDhPublicKey) 
-      : null;
+    // Save session state snapshot for transactional rollback on decryption failure
+    const backupState = {
+      rootKey: this.rootKey,
+      receivingChainKey: this.receivingChainKey,
+      remoteDhPublicKey: this.remoteDhPublicKey,
+      recvMessageNumber: this.recvMessageNumber,
+      skippedKeysEntries: Array.from(this.skippedMessageKeys.entries())
+    };
 
-    if (remoteDhFingerprint !== currentRemoteFingerprint) {
-      // 1. Skip any remaining messages in the previous receiving chain
-      if (this.receivingChainKey) {
-        while (this.recvMessageNumber < header.previousChainLength) {
-          if (this.skippedMessageKeys.size >= this.maxSkip) throw new Error('Skipped keys limit exceeded');
-          const { nextChainKey, messageKey } = await TruplesCryptoCore.ratchetMessageKey(this.receivingChainKey);
-          this.receivingChainKey = nextChainKey;
-          this.skippedMessageKeys.set(`${currentRemoteFingerprint}:${this.recvMessageNumber++}`, messageKey);
+    try {
+      // Check if remote party rotated their Ephemeral DH Key (New DH Ratchet Turn)
+      const currentRemoteFingerprint = this.remoteDhPublicKey 
+        ? await DoubleRatchetSession.getPublicKeyFingerprint(this.remoteDhPublicKey) 
+        : null;
+
+      if (remoteDhFingerprint !== currentRemoteFingerprint) {
+        // 1. Skip any remaining messages in the previous receiving chain
+        if (this.receivingChainKey) {
+          while (this.recvMessageNumber < header.previousChainLength) {
+            if (this.skippedMessageKeys.size >= this.maxSkip) throw new Error('Skipped keys limit exceeded');
+            const { nextChainKey, messageKey } = await TruplesCryptoCore.ratchetMessageKey(this.receivingChainKey);
+            this.receivingChainKey = nextChainKey;
+            this.skippedMessageKeys.set(`${currentRemoteFingerprint}:${this.recvMessageNumber++}`, messageKey);
+          }
         }
+
+        // 2. Import new remote DH public key
+        this.remoteDhPublicKey = await cryptoSubtle.importKey(
+          'raw',
+          remoteDhKeyBytes,
+          { name: 'ECDH', namedCurve: 'P-384' },
+          true,
+          []
+        );
+
+        // 3. Execute DH Ratchet Step (Update Root Key & derive matching Receiving Chain Key)
+        const { newRootKey, newReceivingChainKey } = await TruplesCryptoCore.executeDhRatchetStep(
+          this.rootKey,
+          this.localDhKeypair.privateKey,
+          this.remoteDhPublicKey
+        );
+        this.rootKey = newRootKey;
+        this.receivingChainKey = newReceivingChainKey;
+        this.recvMessageNumber = 0;
       }
 
-      // 2. Import new remote DH public key
-      this.remoteDhPublicKey = await cryptoSubtle.importKey(
-        'raw',
-        remoteDhKeyBytes,
-        { name: 'ECDH', namedCurve: 'P-384' },
-        true,
-        []
-      );
+      // Buffer skipped messages within the current receiving chain
+      while (this.recvMessageNumber < header.messageNumber) {
+        if (this.skippedMessageKeys.size >= this.maxSkip) throw new Error('Skipped keys limit exceeded');
+        const { nextChainKey, messageKey } = await TruplesCryptoCore.ratchetMessageKey(this.receivingChainKey);
+        this.receivingChainKey = nextChainKey;
+        this.skippedMessageKeys.set(`${remoteDhFingerprint}:${this.recvMessageNumber++}`, messageKey);
+      }
 
-      // 3. Execute DH Ratchet Step (Update Root Key & derive matching Receiving Chain Key)
-      const { newRootKey, newChainKey } = await TruplesCryptoCore.executeDhRatchetStep(
-        this.rootKey,
-        this.localDhKeypair.privateKey,
-        this.remoteDhPublicKey,
-        'Truples-DH-Ratchet-Chain-Step'
-      );
-      this.rootKey = newRootKey;
-      this.receivingChainKey = newChainKey;
-      this.recvMessageNumber = 0;
-    }
-
-    // Buffer skipped messages within the current receiving chain
-    while (this.recvMessageNumber < header.messageNumber) {
-      if (this.skippedMessageKeys.size >= this.maxSkip) throw new Error('Skipped keys limit exceeded');
+      // Decrypt current message with AAD verification
       const { nextChainKey, messageKey } = await TruplesCryptoCore.ratchetMessageKey(this.receivingChainKey);
       this.receivingChainKey = nextChainKey;
-      this.skippedMessageKeys.set(`${remoteDhFingerprint}:${this.recvMessageNumber++}`, messageKey);
+      this.recvMessageNumber++;
+
+      const plaintext = await TruplesCryptoCore.decryptPayload(iv, ciphertext, messageKey, aad);
+      this.consumedMessageKeys.add(keyId);
+      return plaintext;
+    } catch (err) {
+      // Rollback session state upon AAD failure or MAC error
+      this.rootKey = backupState.rootKey;
+      this.receivingChainKey = backupState.receivingChainKey;
+      this.remoteDhPublicKey = backupState.remoteDhPublicKey;
+      this.recvMessageNumber = backupState.recvMessageNumber;
+      this.skippedMessageKeys = new Map(backupState.skippedKeysEntries);
+      throw err;
     }
-
-    // Decrypt current message
-    const { nextChainKey, messageKey } = await TruplesCryptoCore.ratchetMessageKey(this.receivingChainKey);
-    this.receivingChainKey = nextChainKey;
-    this.recvMessageNumber++;
-
-    return await TruplesCryptoCore.decryptPayload(iv, ciphertext, messageKey);
   }
 }
