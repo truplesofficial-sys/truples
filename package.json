@@ -1,0 +1,19 @@
+{
+  "name": "truples-crypto-core",
+  "version": "2.0.0",
+  "description": "Reference Cryptographic Specification & Core Implementation for Truples E2EE Protocol",
+  "main": "src/crypto/truples-crypto.js",
+  "scripts": {
+    "test": "node tests/crypto.test.js"
+  },
+  "keywords": [
+    "e2ee",
+    "cryptography",
+    "aes-256-gcm",
+    "ecdh",
+    "webrtc",
+    "zero-retention"
+  ],
+  "author": "Truples Systems",
+  "license": "Proprietary"
+}
