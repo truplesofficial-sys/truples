@@ -731,7 +731,18 @@ async function runCryptographicTestSuite() {
     staleRollbackBlocked = true;
   }
   assert(staleRollbackBlocked, 'Stale snapshot replay with lower monotonic version MUST be rejected by enclave');
-  console.log('   ✅ Passed: Verified complete skipped/consumed key restoration and persistent enclave anti-rollback.\n');
+
+  // 4. Verify ATOMIC COUNTER COMMIT: Forged snapshot V999 does NOT advance enclave counter if decryption fails
+  let forgedV999Blocked = false;
+  try {
+    const forgedSnapshotV999 = { iv: bobEncryptedSnapshotV5.iv, ciphertext: "ForgedCorrupted==", version: 999 };
+    await DoubleRatchetSession.restoreFromEncryptedSnapshot(forgedSnapshotV999, deviceMasterKey, enclave, sessionId);
+  } catch (err) {
+    forgedV999Blocked = true;
+  }
+  assert(forgedV999Blocked, 'Forged snapshot must fail decryption');
+  assert.strictEqual(enclave.getHighestVersion(sessionId), 5, 'Enclave counter must remain exactly 5 (No premature counter advancement on failed restore)');
+  console.log('   ✅ Passed: Verified complete skipped/consumed key restoration, atomic counter commit, and enclave anti-rollback.\n');
 
   // Test 25: Persistent IdentityStore & Truples 60-Digit Safety Number
   console.log('2️⃣5️⃣ Testing Persistent IdentityStore & Truples 60-Digit Safety Number Enclave...');

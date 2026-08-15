@@ -641,6 +641,7 @@ export class DoubleRatchetSession {
 
   /**
    * Restores a session from an encrypted snapshot with master device key validation and anti-rollback verification.
+   * Enforces Atomic Counter Commit: Persistent enclave counter is updated ONLY upon successful decryption and state parsing.
    */
   static async restoreFromEncryptedSnapshot(encryptedSnapshot, deviceStorageKey, persistentEnclave, sessionId) {
     if (persistentEnclave && sessionId) {
@@ -648,12 +649,12 @@ export class DoubleRatchetSession {
       if (encryptedSnapshot.version < highestVersion) {
         throw new Error('Anti-Rollback Replay Attack Detected: Snapshot version is older than highest accepted counter in secure enclave.');
       }
-      persistentEnclave.setHighestVersion(sessionId, encryptedSnapshot.version);
     }
 
     const aad = new Uint8Array(8);
     new DataView(aad.buffer).setBigUint64(0, BigInt(encryptedSnapshot.version), false);
 
+    // 1. Authenticate and decrypt payload with AES-GCM (Throws on forged/tampered ciphertext)
     const decryptedJson = await TruplesCryptoCore.decryptPayload(
       encryptedSnapshot.iv,
       encryptedSnapshot.ciphertext,
@@ -661,8 +662,16 @@ export class DoubleRatchetSession {
       aad
     );
 
+    // 2. Parse and validate snapshot structure
     const snapshot = JSON.parse(decryptedJson);
-    return await DoubleRatchetSession.restoreFromSnapshot(snapshot);
+    const session = await DoubleRatchetSession.restoreFromSnapshot(snapshot);
+
+    // 3. ATOMIC COMMIT: Increment persistent counter only AFTER successful decryption
+    if (persistentEnclave && sessionId) {
+      persistentEnclave.setHighestVersion(sessionId, encryptedSnapshot.version);
+    }
+
+    return session;
   }
 
   /**
