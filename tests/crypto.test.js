@@ -1,6 +1,6 @@
 /**
- * Truples Cryptographic Core Self-Testing Suite (v2.8)
- * Full Double Ratchet State Machine & Negative Security Validation Suite
+ * Truples Cryptographic Core Self-Testing Suite (v2.9)
+ * Full Double Ratchet State Machine, Adversarial Timeline, Multi-Turn & Permutation Suite
  * Run with: node tests/crypto.test.js
  */
 
@@ -8,7 +8,7 @@ const { TruplesCryptoCore, DoubleRatchetSession, canonicalEncodeHeader } = requi
 const assert = require('assert');
 
 async function runCryptographicTestSuite() {
-  console.log('🧪 [TEST] Starting Truples Full Double Ratchet Validation Suite (v2.8)...\n');
+  console.log('🧪 [TEST] Starting Truples Enterprise Double Ratchet Validation Suite (v2.9)...\n');
 
   // Test 1: ECDH Keypair Generation (NIST P-384)
   console.log('1️⃣ Testing Ephemeral ECDH Keypair Generation (P-384)...');
@@ -171,7 +171,7 @@ async function runCryptographicTestSuite() {
   console.log('   ✅ Passed: Verified DH Ratchet state transition and proved 3-way directional chain isolation.\n');
 
   // Test 9: Full Adversarial Post-Compromise Security (PCS) Recovery
-  console.log('9️⃣ Testing Full Adversarial Post-Compromise Security (PCS) Recovery...');
+  console.log('9️⃣ Testing Adversarial Post-Compromise Security (PCS) Recovery...');
   const compromisedRootKey = aliceKeys.rootKey;
   const compromisedOldDhPrivateKey = aliceKeypair.privateKey;
 
@@ -306,13 +306,13 @@ async function runCryptographicTestSuite() {
 
   // Test 14: Header Tamper Resistance (AES-GCM Additional Authenticated Data - AAD)
   console.log('1️⃣4️⃣ Testing Double Ratchet Header Tamper Rejection via AES-GCM AAD Binding...');
-  const legitimateMsg = await aliceSession.send("Authenticity Guaranteed Message");
+  const legitimateMsg = await epochAlice.send("Authenticity Guaranteed Message");
 
   // Attack A: Adversary tampers with messageNumber
   const tamperedNumberHeader = { ...legitimateMsg.header, messageNumber: 999 };
   let tamperedNumberFailed = false;
   try {
-    await bobSession.receive(tamperedNumberHeader, legitimateMsg.iv, legitimateMsg.ciphertext);
+    await epochBob.receive(tamperedNumberHeader, legitimateMsg.iv, legitimateMsg.ciphertext);
   } catch (err) {
     tamperedNumberFailed = true;
   }
@@ -324,7 +324,7 @@ async function runCryptographicTestSuite() {
   const tamperedDhHeader = { ...legitimateMsg.header, dhPublicKey: Buffer.from(fakeRaw).toString('base64') };
   let tamperedDhFailed = false;
   try {
-    await bobSession.receive(tamperedDhHeader, legitimateMsg.iv, legitimateMsg.ciphertext);
+    await epochBob.receive(tamperedDhHeader, legitimateMsg.iv, legitimateMsg.ciphertext);
   } catch (err) {
     tamperedDhFailed = true;
   }
@@ -334,7 +334,7 @@ async function runCryptographicTestSuite() {
   const tamperedPrevLenHeader = { ...legitimateMsg.header, previousChainLength: 777 };
   let tamperedPrevLenFailed = false;
   try {
-    await bobSession.receive(tamperedPrevLenHeader, legitimateMsg.iv, legitimateMsg.ciphertext);
+    await epochBob.receive(tamperedPrevLenHeader, legitimateMsg.iv, legitimateMsg.ciphertext);
   } catch (err) {
     tamperedPrevLenFailed = true;
   }
@@ -343,19 +343,19 @@ async function runCryptographicTestSuite() {
 
   // Test 15: Strict Replay Attack Protection & Transactional Rollback
   console.log('1️⃣5️⃣ Testing Strict Replay Attack Protection & State Rollback...');
-  const legitimateRecv = await bobSession.receive(legitimateMsg.header, legitimateMsg.iv, legitimateMsg.ciphertext);
+  const legitimateRecv = await epochBob.receive(legitimateMsg.header, legitimateMsg.iv, legitimateMsg.ciphertext);
   assert.strictEqual(legitimateRecv, "Authenticity Guaranteed Message");
 
   let replayBlocked = false;
   try {
-    await bobSession.receive(legitimateMsg.header, legitimateMsg.iv, legitimateMsg.ciphertext);
+    await epochBob.receive(legitimateMsg.header, legitimateMsg.iv, legitimateMsg.ciphertext);
   } catch (err) {
     replayBlocked = true;
   }
   assert(replayBlocked, 'Replay of previously consumed message MUST be rejected with error');
   console.log('   ✅ Passed: Verified strict replay attack rejection for duplicate transmissions.\n');
 
-  // Test 16: Negative Protocol Security & Malformed Input Test Suite
+  // Test 16: Negative Protocol Security & Malformed Input Bounds
   console.log('1️⃣6️⃣ Testing Negative Protocol Security & Malformed Input Bounds...');
   
   // A: Malformed public key (invalid length)
@@ -384,7 +384,7 @@ async function runCryptographicTestSuite() {
   }
   assert(invalidIntegerRejected, 'Negative header sequence numbers must be rejected');
 
-  // C: Bounded LRU Replay Cache Eviction (FIFO limit enforcement)
+  // C: Bounded Replay Protection Cache Eviction
   const testLruSession = new DoubleRatchetSession({
     rootKey: aliceKeys.rootKey,
     sendingChainKey: aliceKeys.sendingChainKey,
@@ -401,11 +401,174 @@ async function runCryptographicTestSuite() {
   testLruSession.recordConsumedKey('key-4'); // Triggers eviction of oldest ('key-1')
   assert(!testLruSession.consumedMessageKeys.has('key-1'), 'key-1 must be evicted from bounded cache');
   assert(testLruSession.consumedMessageKeys.has('key-4'), 'key-4 must exist in bounded cache');
-  console.log('   ✅ Passed: Verified strict P-384 point validation, integer bounds, and bounded LRU cache eviction.\n');
+  console.log('   ✅ Passed: Verified strict P-384 point validation, integer bounds, and bounded cache eviction.\n');
 
-  console.log('========================================================================');
-  console.log('🎉 ALL 16 CRYPTOGRAPHIC, FULL DOUBLE RATCHET, AAD & NEGATIVE TESTS PASSED!');
-  console.log('========================================================================');
+  // Test 17: Full Adversarial PCS Compromise Timeline Test
+  console.log('1️⃣7️⃣ Testing Full Adversarial PCS Compromise Timeline (Post-Turn Healing Boundary)...');
+  const tAliceSession = new DoubleRatchetSession({
+    rootKey: aliceKeys.rootKey,
+    sendingChainKey: aliceKeys.sendingChainKey,
+    receivingChainKey: aliceKeys.receivingChainKey,
+    localDhKeypair: aliceKeypair,
+    remoteDhPublicKey: bobKeypair.publicKey,
+    role: 'initiator'
+  });
+
+  const tBobSession = new DoubleRatchetSession({
+    rootKey: bobKeys.rootKey,
+    sendingChainKey: bobKeys.sendingChainKey,
+    receivingChainKey: bobKeys.receivingChainKey,
+    localDhKeypair: bobKeypair,
+    remoteDhPublicKey: aliceKeypair.publicKey,
+    role: 'responder'
+  });
+
+  // T0: Normal communication
+  const t0Msg = await tAliceSession.send("T0: Normal baseline message");
+  await tBobSession.receive(t0Msg.header, t0Msg.iv, t0Msg.ciphertext);
+
+  // T1: Attacker compromises Bob's complete cryptographic state at T1
+  const attackerSnapshot = {
+    rootKey: tBobSession.rootKey,
+    receivingChainKey: tBobSession.receivingChainKey,
+    localDhPrivateKey: tBobSession.localDhKeypair.privateKey,
+    remoteDhPublicKey: tBobSession.remoteDhPublicKey
+  };
+
+  // T2: Alice rotates her DH key and sends T2 inbound to Bob
+  await tAliceSession.rotateLocalDhKeypair();
+  const t2Msg = await tAliceSession.send("T2: Inbound turn from Alice with fresh DH");
+
+  // T3: Bob receives T2 (flags dhRatchetTurnPending for next reply)
+  const t3Recv = await tBobSession.receive(t2Msg.header, t2Msg.iv, t2Msg.ciphertext);
+  assert.strictEqual(t3Recv, "T2: Inbound turn from Alice with fresh DH");
+
+  // T4: Bob sends outbound reply (Automatically regenerates local DH Keypair -> PCS FULLY HEALED!)
+  const t4Msg = await tBobSession.send("T4: Outbound reply from Bob (Fresh Local DH generated)");
+  const t4AliceRecv = await tAliceSession.receive(t4Msg.header, t4Msg.iv, t4Msg.ciphertext);
+  assert.strictEqual(t4AliceRecv, "T4: Outbound reply from Bob (Fresh Local DH generated)");
+
+  // T5: Alice sends subsequent message in newly healed epoch
+  const t5Msg = await tAliceSession.send("T5: Future transmission in healed epoch");
+  const t5BobRecv = await tBobSession.receive(t5Msg.header, t5Msg.iv, t5Msg.ciphertext);
+  assert.strictEqual(t5BobRecv, "T5: Future transmission in healed epoch");
+
+  // T6: Attacker attempts to decrypt T4 and T5 using compromised T1 state
+  let attackerT4Failed = false;
+  try {
+    const fakeAttackerRatchet = await TruplesCryptoCore.executeDhRatchetStep(
+      attackerSnapshot.rootKey,
+      attackerSnapshot.localDhPrivateKey,
+      tAliceSession.localDhKeypair.publicKey,
+      'responder'
+    );
+    const { messageKey: fakeMsgKey } = await TruplesCryptoCore.ratchetMessageKey(fakeAttackerRatchet.newSendingChainKey);
+    const aadT4 = canonicalEncodeHeader(t4Msg.header);
+    await TruplesCryptoCore.decryptPayload(t4Msg.iv, t4Msg.ciphertext, fakeMsgKey, aadT4);
+  } catch (err) {
+    attackerT4Failed = true;
+  }
+  assert(attackerT4Failed, 'Attacker with T1 state MUST fail to decrypt T4 outbound message');
+
+  let attackerT5Failed = false;
+  try {
+    const fakeAttackerRatchet = await TruplesCryptoCore.executeDhRatchetStep(
+      attackerSnapshot.rootKey,
+      attackerSnapshot.localDhPrivateKey,
+      tAliceSession.localDhKeypair.publicKey,
+      'responder'
+    );
+    const { messageKey: fakeMsgKey } = await TruplesCryptoCore.ratchetMessageKey(fakeAttackerRatchet.newReceivingChainKey);
+    const aadT5 = canonicalEncodeHeader(t5Msg.header);
+    await TruplesCryptoCore.decryptPayload(t5Msg.iv, t5Msg.ciphertext, fakeMsgKey, aadT5);
+  } catch (err) {
+    attackerT5Failed = true;
+  }
+  assert(attackerT5Failed, 'Attacker with T1 state MUST fail to decrypt T5 subsequent message');
+  console.log('   ✅ Passed: Full Adversarial Timeline proved PCS healing boundary after outbound turn.\n');
+
+  // Test 18: Multi-Turn Continuous Automated Ephemeral DH Ratchet Test (10 Epochs)
+  console.log('1️⃣8️⃣ Testing Multi-Turn Continuous Automated Ephemeral DH Ratchet (10 Turns)...');
+  const mtAlice = new DoubleRatchetSession({
+    rootKey: aliceKeys.rootKey,
+    sendingChainKey: aliceKeys.sendingChainKey,
+    receivingChainKey: aliceKeys.receivingChainKey,
+    localDhKeypair: aliceKeypair,
+    remoteDhPublicKey: bobKeypair.publicKey,
+    role: 'initiator'
+  });
+
+  const mtBob = new DoubleRatchetSession({
+    rootKey: bobKeys.rootKey,
+    sendingChainKey: bobKeys.sendingChainKey,
+    receivingChainKey: bobKeys.receivingChainKey,
+    localDhKeypair: bobKeypair,
+    remoteDhPublicKey: aliceKeypair.publicKey,
+    role: 'responder'
+  });
+
+  for (let turn = 1; turn <= 5; turn++) {
+    // Alice sends to Bob
+    const aMsg = await mtAlice.send(`Alice message at turn ${turn}`);
+    const bRecv = await mtBob.receive(aMsg.header, aMsg.iv, aMsg.ciphertext);
+    assert.strictEqual(bRecv, `Alice message at turn ${turn}`);
+
+    // Bob replies to Alice (Auto-advances DH ratchet)
+    const bMsg = await mtBob.send(`Bob reply at turn ${turn}`);
+    const aRecv = await mtAlice.receive(bMsg.header, bMsg.iv, bMsg.ciphertext);
+    assert.strictEqual(aRecv, `Bob reply at turn ${turn}`);
+  }
+  console.log('   ✅ Passed: Verified 10 continuous automated turn-taking DH ratchet state transitions.\n');
+
+  // Test 19: Arbitrary Multi-Epoch Packet Permutation Stress Test
+  console.log('1️⃣9️⃣ Testing Arbitrary Multi-Epoch Packet Permutation Stress Test (Interleaved Shuffled Delivery)...');
+  const pAlice = new DoubleRatchetSession({
+    rootKey: aliceKeys.rootKey,
+    sendingChainKey: aliceKeys.sendingChainKey,
+    receivingChainKey: aliceKeys.receivingChainKey,
+    localDhKeypair: aliceKeypair,
+    remoteDhPublicKey: bobKeypair.publicKey,
+    role: 'initiator'
+  });
+
+  const pBob = new DoubleRatchetSession({
+    rootKey: bobKeys.rootKey,
+    sendingChainKey: bobKeys.sendingChainKey,
+    receivingChainKey: bobKeys.receivingChainKey,
+    localDhKeypair: bobKeypair,
+    remoteDhPublicKey: aliceKeypair.publicKey,
+    role: 'responder'
+  });
+
+  // Epoch 1: A1, A2, A3
+  const a1 = await pAlice.send("Epoch 1 - Msg A1");
+  const a2 = await pAlice.send("Epoch 1 - Msg A2");
+  const a3 = await pAlice.send("Epoch 1 - Msg A3");
+
+  // Epoch 2: Advance to Epoch 2 with fresh DH key, send B1, B2
+  await pAlice.rotateLocalDhKeypair();
+  const b1 = await pAlice.send("Epoch 2 - Msg B1");
+  const b2 = await pAlice.send("Epoch 2 - Msg B2");
+
+  // Interleaved Adversarial Network Permutation across Epochs: [B1, A3, B2, A1, A2]
+  // Epoch 2 arrives first, triggering DH ratchet and buffering, followed by heavily shuffled Epoch 1 messages
+  const shuffledPackets = [
+    { packet: b1, expected: "Epoch 2 - Msg B1" },
+    { packet: a3, expected: "Epoch 1 - Msg A3" },
+    { packet: b2, expected: "Epoch 2 - Msg B2" },
+    { packet: a1, expected: "Epoch 1 - Msg A1" },
+    { packet: a2, expected: "Epoch 1 - Msg A2" }
+  ];
+
+  for (const item of shuffledPackets) {
+    const decrypted = await pBob.receive(item.packet.header, item.packet.iv, item.packet.ciphertext);
+    assert.strictEqual(decrypted, item.expected, `Decrypted text must match expected content for ${item.expected}`);
+  }
+  console.log('   ✅ Passed: Successfully resolved complex multi-epoch interleaved packet permutation.\n');
+
+  console.log('========================================================================================');
+  console.log('🎉 ALL 19 CRYPTOGRAPHIC, DOUBLE RATCHET, PCS TIMELINE & PERMUTATION TESTS PASSED (19/19)!');
+  console.log('========================================================================================');
 }
 
 runCryptographicTestSuite().catch(err => {

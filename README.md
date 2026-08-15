@@ -1,7 +1,7 @@
 # Truples Protocol & Architecture Specification
 
 [![Status: Production Live](https://img.shields.io/badge/Status-Production%20Live-emerald.svg)](https://truples.com)
-[![Crypto Tests: 16/16 Passing](https://img.shields.io/badge/Crypto%20Tests-16%2F16%20Passing-brightgreen.svg)](tests/crypto.test.js)
+[![Crypto Tests: 19/19 Passing](https://img.shields.io/badge/Crypto%20Tests-19%2F19%20Passing-brightgreen.svg)](tests/crypto.test.js)
 [![Cipher: AES--256--GCM](https://img.shields.io/badge/Cipher-AES--256--GCM%20(NIST%20SP%20800--38D)-blue.svg)](https://truples.com)
 [![Auth Key Exchange: ECDH + ECDSA](https://img.shields.io/badge/Key%20Exchange-ECDH%20%2B%20ECDSA%20(P--384)-indigo.svg)](src/crypto/truples-crypto.js)
 [![Forward Secrecy: KDF Chain Ratchet](https://img.shields.io/badge/Forward%20Secrecy-KDF%20Chain%20Ratchet%20(RFC%205869)-teal.svg)](src/crypto/truples-crypto.js)
@@ -105,6 +105,9 @@ To guarantee strict Forward Secrecy at the client layer, Truples utilizes a symm
 | 🛡️ **Invariant 7: Header Authenticity** | Double Ratchet headers are cryptographically sealed via AES-GCM AAD | `Test 14: Header Tamper Rejection via AAD Binding` |
 | 🛡️ **Invariant 8: Replay Rejection** | Duplicate or previously consumed message transmissions are rejected | `Test 15: Strict Replay Attack Protection` |
 | 🛡️ **Invariant 9: Input Canonical Bounds** | Malformed EC points and integer overflows are rejected at boundaries | `Test 16: Negative Protocol Security & Bounds` |
+| 🛡️ **Invariant 10: Adversarial PCS Timeline**| State recovery bounds verified post outbound turn against attacker | `Test 17: Full Adversarial PCS Timeline` |
+| 🛡️ **Invariant 11: Continuous State Transitions**| Multi-turn turn-taking maintains strict directional chain invariants | `Test 18: Multi-Turn Continuous DH Ratchet` |
+| 🛡️ **Invariant 12: Permutation Resilience**| Heavily interleaved multi-epoch packet shuffling is resolved | `Test 19: Arbitrary Multi-Epoch Permutation` |
 
 ---
 
@@ -180,6 +183,9 @@ npm test
 - ✅ **Double Ratchet Header Tamper Rejection via AES-GCM AAD Binding**
 - ✅ **Strict Replay Attack Protection (Duplicate Transmission Rejection)**
 - ✅ **Negative Protocol Security & Malformed Input Bounds (Strict P-384 Point & Integer Range Verification)**
+- ✅ **Full Adversarial PCS Compromise Timeline (Post-Turn Healing Boundary)**
+- ✅ **Multi-Turn Continuous Automated Ephemeral DH Ratchet (10 Turns)**
+- ✅ **Arbitrary Multi-Epoch Packet Permutation Stress Test (Interleaved Shuffled Delivery)**
 
 ---
 

@@ -1,5 +1,5 @@
 /**
- * Truples Cryptographic Core & Full Double Ratchet State Machine (v2.8)
+ * Truples Cryptographic Core & Enterprise Double Ratchet State Machine (v2.9)
  * 
  * Fully compatible with:
  * - W3C WebCrypto API (Browser & Node.js Universal Runtime, zero external dependencies)
@@ -7,12 +7,12 @@
  * - FIPS 186-4 (ECDSA over NIST P-384 with SHA-384 for MITM-resistant authenticated key exchange)
  * - RFC 5903 (ECDH over NIST P-384 curve with uncompressed 97-byte 0x04 point validation)
  * - RFC 5869 (HKDF with HMAC-SHA256)
- * - Enterprise Double Ratchet Specification:
- *   - Continuous Automated DH Ratchet Turn-Taking (Auto local DH rotation upon remote turn)
+ * - Enterprise Double Ratchet Specification (Signal-Inspired Architecture):
+ *   - Full 256-bit SHA-256 Key Fingerprinting for Zero Identifier Collision
+ *   - Continuous Automated Ephemeral DH Ratchet Turn-Taking (Self-Healing PCS upon Outbound Turn)
  *   - Directional DH KDF Chain Separation (Alice.Send == Bob.Recv && Alice.Send != Alice.Recv)
- *   - AAD-Authenticated Header Binding with Strict Integer Validation
- *   - Bounded LRU Replay Cache (Resource Exhaustion & DoS Defense)
- *   - Atomic Transactional State Rollback on Decryption / Tamper Failure
+ *   - AAD-Authenticated Header Binding with Strict Integer Range Validation
+ *   - Bounded Replay Protection Cache with Transactional State Rollback on Tamper/Failure
  */
 
 const cryptoSubtle = typeof window !== 'undefined' && window.crypto?.subtle 
@@ -236,12 +236,6 @@ export class TruplesCryptoCore {
   /**
    * Executes an Asymmetric DH Ratchet Step upon conversational turn-taking.
    * Derives a new Root Key and strictly separated directional sending/receiving chains.
-   * 
-   * @param {CryptoKey} currentRootKey 
-   * @param {CryptoKey} localDhPrivateKey 
-   * @param {CryptoKey} remoteDhPublicKey 
-   * @param {'initiator'|'responder'} [role='initiator']
-   * @returns {Promise<{ newRootKey: CryptoKey, newSendingChainKey: CryptoKey, newReceivingChainKey: CryptoKey }>}
    */
   static async executeDhRatchetStep(currentRootKey, localDhPrivateKey, remoteDhPublicKey, role = 'initiator') {
     const newSharedBits = await cryptoSubtle.deriveBits(
@@ -423,8 +417,8 @@ export class TruplesCryptoCore {
 }
 
 /**
- * Signal-Standard Full Double Ratchet Session State Machine
- * Features Automated Continuous DH Turn-Taking, Directional Chain Separation, AAD Header Binding & Bounded Replay Defense.
+ * Enterprise Double Ratchet Session State Machine (Signal-Inspired Architecture)
+ * Features Automated Continuous DH Turn-Taking, Directional Chain Separation, 256-bit SHA Fingerprints & Bounded Replay Cache.
  */
 export class DoubleRatchetSession {
   constructor({
@@ -445,19 +439,32 @@ export class DoubleRatchetSession {
     this.previousChainLength = 0;
     this.recvMessageNumber = 0;
     this.dhRatchetTurnPending = false; // Trigger for auto local DH rotation upon remote DH receipt
-    this.consumedMessageKeys = new Map(); // Bounded LRU Cache: Key -> Timestamp
+    this.consumedMessageKeys = new Map(); // Bounded Replay Cache: Key -> Timestamp
     this.maxConsumedKeys = 5000;
     this.skippedMessageKeys = new Map();  // Key: `${dhFingerprint}:${messageNumber}`, Value: CryptoKey
     this.maxSkip = 1000;
   }
 
+  /**
+   * Computes a full 256-bit SHA-256 cryptographic fingerprint for public keys to eliminate identifier collisions.
+   */
   static async getPublicKeyFingerprint(publicKey) {
     const raw = await cryptoSubtle.exportKey('raw', publicKey);
-    return bytesToBase64(new Uint8Array(raw)).substring(0, 24);
+    const hashBuffer = await cryptoSubtle.digest('SHA-256', raw);
+    return bytesToBase64(new Uint8Array(hashBuffer));
   }
 
   /**
-   * Records a consumed message key in the bounded LRU cache (Prevents unbounded memory growth).
+   * Computes fingerprint from raw Base64 public key.
+   */
+  static async getFingerprintFromBase64(pubKeyBase64) {
+    const raw = base64ToBytes(pubKeyBase64);
+    const hashBuffer = await cryptoSubtle.digest('SHA-256', raw);
+    return bytesToBase64(new Uint8Array(hashBuffer));
+  }
+
+  /**
+   * Records a consumed message key in the bounded replay cache (Prevents unbounded memory growth).
    */
   recordConsumedKey(keyId) {
     if (this.consumedMessageKeys.size >= this.maxConsumedKeys) {
@@ -516,7 +523,7 @@ export class DoubleRatchetSession {
    */
   async receive(header, iv, ciphertext) {
     const aad = canonicalEncodeHeader(header);
-    const remoteDhFingerprint = header.dhPublicKey.substring(0, 24);
+    const remoteDhFingerprint = await DoubleRatchetSession.getFingerprintFromBase64(header.dhPublicKey);
     const keyId = `${remoteDhFingerprint}:${header.messageNumber}`;
 
     // Replay Attack Protection: Reject already consumed message keys
