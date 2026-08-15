@@ -15,7 +15,7 @@
 
 **Truples** is an enterprise-grade, end-to-end encrypted (E2EE) communication platform architected around **client-side symmetric KDF chain ratcheting**, **MITM-resistant Authenticated Key Exchange (ECDH + ECDSA)**, an **ephemeral in-memory relay model (Zero-Retention)**, and **decentralized Peer-to-Peer (P2P) WebRTC media channels**.
 
-This repository contains the complete technical specifications, cryptographic primitives, formal protocol specification, and a runnable reference implementation of the cryptographic core engine.
+This repository contains the complete technical specifications, cryptographic primitives, formal protocol specification, machine-checked Tamarin verification proofs, deterministic cross-language test vectors, and an **independently auditable cryptographic protocol reference implementation** of the cryptographic core engine.
 
 - 🌐 **Live Web Application**: [https://truples.com](https://truples.com)
 - 📜 **Formal Protocol Specification**: [`docs/TRUPLES-RATCHET-SPEC.md`](docs/TRUPLES-RATCHET-SPEC.md)
