@@ -17,7 +17,12 @@
 This repository contains the complete technical specifications, cryptographic primitives, and a runnable reference implementation of the cryptographic core engine.
 
 - 🌐 **Live Web Application**: [https://truples.com](https://truples.com)
-- 🧪 **Reference Cryptographic Module**: [`src/crypto/truples-crypto.js`](src/crypto/truples-crypto.js)
+- 🧪 **Open Cryptographic Core & Test Suite**: [`src/crypto/truples-crypto.js`](src/crypto/truples-crypto.js) | [`tests/crypto.test.js`](tests/crypto.test.js)
+
+### 1.1 Commercial IP & Open Cryptographic Core Policy
+To protect commercial infrastructure and proprietary routing assets while guaranteeing 100% cryptographic verifiability:
+- **Client Cryptographic Engine**: Fully open-source under standard W3C WebCrypto primitives for independent mathematical auditing.
+- **Relay Infrastructure & Backend**: Maintained under a secure proprietary license to protect operational enclaves and prevent unauthorized commercial cloning.
 
 ---
 
@@ -184,6 +189,16 @@ npm test
 | **Relay Infrastructure**| ✅ Malicious or subpoenaed relay servers (Server cannot decrypt E2EE payload) | ❌ Direct database seizure of recipient offline device stores |
 | **Cryptographic State** | ✅ Historical key compromise (Self-healing via subsequent DH Ratchet turns) | ❌ Compromised OS kernel, hardware keyloggers, screen scrapers |
 | **Message Ordering** | ✅ Out-of-order delivery, duplicated packets, ciphertext bit-flipping (128-bit MAC) | ❌ Malicious verified recipient leaking decrypted plaintexts |
+
+### 7.2 Data Retention & Zeroization Matrix
+
+| Data Asset | Server-Side Storage Policy | Cryptographic Lifetime / Purge Event |
+| :--- | :--- | :--- |
+| **Message Plaintext** | ❌ **Strict Zero (0 bytes)** | Decrypted exclusively within recipient device memory |
+| **Message Ciphertext** | ⚠️ **Ephemeral In-Flight Transit** | Instantly purged upon recipient acknowledgment (`ACK`) |
+| **Master & Private Keys**| ❌ **Strict Zero (0 bytes)** | Generated and locked in client OS Keystore/Keychain |
+| **Phone / Email / PII** | ❌ **Zero Linkage** | Account creation requires zero personal identification data |
+| **Audio / Video Streams**| ❌ **Zero Server Relay** | Direct P2P `DTLS 1.3 / SRTP` media streaming between clients |
 
 ---
 
