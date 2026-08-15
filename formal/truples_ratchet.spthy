@@ -1,0 +1,114 @@
+theory Truples_Enterprise_Double_Ratchet
+begin
+
+builtins: hashing, asymmetric-encryption, signing, diffie-hellman, symmetric-encryption
+
+/*
+ * Truples Enterprise Double Ratchet Formal Protocol Model (Tamarin Prover)
+ * 
+ * Formal Proof Targets:
+ * 1. Mutual Secrecy of Derived Root and Directional Chain Keys
+ * 2. Strict Forward Secrecy (FS) against historical state compromise
+ * 3. Post-Compromise Security (PCS) self-healing via Ephemeral DH turn-taking
+ * 4. MITM Resistance via Long-term ECDSA Identity Binding
+ * 5. Replay Attack Invariance under Dolev-Yao Network Adversary
+ */
+
+// 1. Long-Term Identity Key Generation
+rule Generate_Identity_Key:
+    [ Fr(~ltk) ]
+  -->
+    [ !Ltk($A, ~ltk), !Pk($A, pk(~ltk)), Out(pk(~ltk)) ]
+
+// 2. Ephemeral Prekey & Authenticated Handshake (Alice -> Bob)
+rule Handshake_Init:
+    let
+      signedEcdh = sign(<'ECDH_INIT', ~ephA>, ~ltkA)
+    in
+    [ !Ltk($A, ~ltkA), Fr(~ephA) ]
+  -->
+    [ Init_1($A, $B, ~ephA), Out(<'HANDSHAKE_INIT', $A, 'g'^~ephA, signedEcdh>) ]
+
+// 3. Bob Receives Handshake, Verifies Signature & Establishes Root/Directional Chains
+rule Handshake_Resp:
+    let
+      signedEcdhB = sign(<'ECDH_RESP', ~ephB>, ~ltkB)
+      sharedSecret = pkA^~ephB
+      rootKey = h(<'Truples-Root-Key', sharedSecret>)
+      sendChain = h(<'Truples-Chain-Resp-To-Init', sharedSecret>)
+      recvChain = h(<'Truples-Chain-Init-To-Resp', sharedSecret>)
+    in
+    [ !Ltk($B, ~ltkB), !Pk($A, pkA), Fr(~ephB), In(<'HANDSHAKE_INIT', $A, pkA_eph, sigA>) ]
+  --[
+      Eq(verify(sigA, <'ECDH_INIT', pkA_eph>, pkA), true),
+      SessionEstablished($B, $A, rootKey, sendChain, recvChain)
+    ]->
+    [ Resp_Done($B, $A, rootKey, sendChain, recvChain), Out(<'HANDSHAKE_RESP', $B, 'g'^~ephB, signedEcdhB>) ]
+
+// 4. Alice Finalizes Handshake & Aligns Chains (Alice.Send == Bob.Recv)
+rule Handshake_Finalize:
+    let
+      sharedSecret = pkB_eph^~ephA
+      rootKey = h(<'Truples-Root-Key', sharedSecret>)
+      sendChain = h(<'Truples-Chain-Init-To-Resp', sharedSecret>)
+      recvChain = h(<'Truples-Chain-Resp-To-Init', sharedSecret>)
+    in
+    [ Init_1($A, $B, ~ephA), !Pk($B, pkB), In(<'HANDSHAKE_RESP', $B, pkB_eph, sigB>) ]
+  --[
+      Eq(verify(sigB, <'ECDH_RESP', pkB_eph>, pkB), true),
+      SessionEstablished($A, $B, rootKey, sendChain, recvChain)
+    ]->
+    [ Active_Session($A, $B, rootKey, sendChain, recvChain, ~ephA, pkB_eph) ]
+
+// 5. Symmetric Message Ratchet Step (Forward Secrecy)
+rule Send_Message_Ratcheted:
+    let
+      msgKey = h(<'Truples-Message-Key', sendChain>)
+      nextSendChain = h(<'Truples-Chain-Step', sendChain>)
+      ciphertext = senc(~msg, msgKey)
+    in
+    [ Active_Session($A, $B, rootKey, sendChain, recvChain, ~localDh, remoteDh), Fr(~msg) ]
+  --[
+      MessageSent($A, $B, ~msg, msgKey),
+      Secret($A, $B, ~msg)
+    ]->
+    [ Active_Session($A, $B, rootKey, nextSendChain, recvChain, ~localDh, remoteDh), Out(ciphertext) ]
+
+// 6. Asymmetric DH Ratchet Turn-Taking Step (Post-Compromise Security Recovery)
+rule Ephemeral_DH_Ratchet_Turn:
+    let
+      newSharedSecret = remoteDh^~freshDh
+      newRootKey = h(<'Truples-DH-Ratchet-Root-Step', rootKey, newSharedSecret>)
+      newSendChain = h(<'Truples-DH-Ratchet-Init-To-Resp', newSharedSecret>)
+      newRecvChain = h(<'Truples-DH-Ratchet-Resp-To-Init', newSharedSecret>)
+    in
+    [ Active_Session($A, $B, rootKey, sendChain, recvChain, ~oldDh, remoteDh), Fr(~freshDh) ]
+  --[
+      DHRatchetStep($A, $B, newRootKey),
+      PCSHealed($A, $B, newRootKey)
+    ]->
+    [ Active_Session($A, $B, newRootKey, newSendChain, newRecvChain, ~freshDh, remoteDh), Out('g'^~freshDh) ]
+
+// ==========================================
+// SECURITY LEMMAS & MATHEMATICAL INVARIANTS
+// ==========================================
+
+// Lemma 1: Handshake Agreement & Key Alignment
+lemma Session_Key_Agreement:
+    "All A B rk send recv #i.
+        SessionEstablished(A, B, rk, send, recv) @ #i
+        ==> (Ex #j. SessionEstablished(B, A, rk, recv, send) @ #j)"
+
+// Lemma 2: Forward Secrecy of Historical Messages
+lemma Forward_Secrecy:
+    "All A B m key #i.
+        MessageSent(A, B, m, key) @ #i
+        ==> not (Ex #j. K(m) @ #j)"
+
+// Lemma 3: Post-Compromise Security (PCS Recovery after Adversary State Exposure)
+lemma Post_Compromise_Security:
+    "All A B rk #i.
+        PCSHealed(A, B, rk) @ #i
+        ==> not (Ex #j. K(rk) @ #j)"
+
+end

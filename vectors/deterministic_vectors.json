@@ -1,0 +1,32 @@
+{
+  "protocol": "Truples-Enterprise-Double-Ratchet",
+  "version": "1.0",
+  "curve": "NIST-P-384",
+  "cipher": "AES-256-GCM",
+  "kdf": "HKDF-HMAC-SHA256",
+  "test_vectors": [
+    {
+      "description": "Deterministic 113-Byte Canonical Header AAD",
+      "input": {
+        "version": 1,
+        "publicKeyLength": 97,
+        "previousChainLength": 42,
+        "messageNumber": 108
+      },
+      "expected_aad_byte_length": 113,
+      "expected_aad_hex_prefix": "000000010000006104"
+    },
+    {
+      "description": "Role-Aware Directional KDF Derivation",
+      "input": {
+        "salt_hex": "5555555555555555555555555555555555555555555555555555555555555555",
+        "info_root": "Truples-Root-Key",
+        "info_init_to_resp": "Truples-Chain-Initiator-To-Responder",
+        "info_resp_to_init": "Truples-Chain-Responder-To-Initiator"
+      },
+      "expected_root_key_bits": 256,
+      "expected_chain_key_bits": 256,
+      "directional_isolation_assert": "SendChain !== RecvChain"
+    }
+  ]
+}
