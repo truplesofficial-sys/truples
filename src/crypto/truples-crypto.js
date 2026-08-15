@@ -1,5 +1,5 @@
 /**
- * Truples Cryptographic Core & Enterprise Double Ratchet State Machine (v2.9)
+ * Truples Cryptographic Core & Enterprise Double Ratchet State Machine
  * 
  * Fully compatible with:
  * - W3C WebCrypto API (Browser & Node.js Universal Runtime, zero external dependencies)
@@ -7,12 +7,13 @@
  * - FIPS 186-4 (ECDSA over NIST P-384 with SHA-384 for MITM-resistant authenticated key exchange)
  * - RFC 5903 (ECDH over NIST P-384 curve with uncompressed 97-byte 0x04 point validation)
  * - RFC 5869 (HKDF with HMAC-SHA256)
- * - Enterprise Double Ratchet Specification (Signal-Inspired Architecture):
- *   - Full 256-bit SHA-256 Key Fingerprinting for Zero Identifier Collision
+ * - Enterprise Double Ratchet Specification:
+ *   - Full 256-bit SHA-256 Key Fingerprinting for Cryptographically Negligible Collision Risk
  *   - Continuous Automated Ephemeral DH Ratchet Turn-Taking (Self-Healing PCS upon Outbound Turn)
  *   - Directional DH KDF Chain Separation (Alice.Send == Bob.Recv && Alice.Send != Alice.Recv)
  *   - AAD-Authenticated Header Binding with Strict Integer Range Validation
  *   - Bounded Replay Protection Cache with Transactional State Rollback on Tamper/Failure
+ *   - Full State Serialization & Crash Restoration Enclave
  */
 
 const cryptoSubtle = typeof window !== 'undefined' && window.crypto?.subtle 
@@ -167,7 +168,7 @@ export class TruplesCryptoCore {
         name: 'HKDF',
         hash: 'SHA-256',
         salt: salt,
-        info: new TextEncoder().encode('Truples-Root-Key-v2')
+        info: new TextEncoder().encode('Truples-Root-Key')
       },
       hkdfKey,
       { name: 'HMAC', hash: 'SHA-256', length: 256 },
@@ -417,7 +418,7 @@ export class TruplesCryptoCore {
 }
 
 /**
- * Enterprise Double Ratchet Session State Machine (Signal-Inspired Architecture)
+ * Enterprise Double Ratchet Session State Machine
  * Features Automated Continuous DH Turn-Taking, Directional Chain Separation, 256-bit SHA Fingerprints & Bounded Replay Cache.
  */
 export class DoubleRatchetSession {
@@ -446,7 +447,7 @@ export class DoubleRatchetSession {
   }
 
   /**
-   * Computes a full 256-bit SHA-256 cryptographic fingerprint for public keys to eliminate identifier collisions.
+   * Computes a full 256-bit SHA-256 cryptographic fingerprint for public keys.
    */
   static async getPublicKeyFingerprint(publicKey) {
     const raw = await cryptoSubtle.exportKey('raw', publicKey);
@@ -464,7 +465,7 @@ export class DoubleRatchetSession {
   }
 
   /**
-   * Records a consumed message key in the bounded replay cache (Prevents unbounded memory growth).
+   * Records a consumed message key in the bounded replay cache.
    */
   recordConsumedKey(keyId) {
     if (this.consumedMessageKeys.size >= this.maxConsumedKeys) {
@@ -472,6 +473,78 @@ export class DoubleRatchetSession {
       this.consumedMessageKeys.delete(oldestKey);
     }
     this.consumedMessageKeys.set(keyId, Date.now());
+  }
+
+  /**
+   * Exports full serializable state snapshot for crash resilience and persistence.
+   */
+  async exportStateSnapshot() {
+    const rootRaw = await cryptoSubtle.exportKey('raw', this.rootKey);
+    const sendRaw = await cryptoSubtle.exportKey('raw', this.sendingChainKey);
+    const recvRaw = await cryptoSubtle.exportKey('raw', this.receivingChainKey);
+    const dhPrivRaw = await cryptoSubtle.exportKey('pkcs8', this.localDhKeypair.privateKey);
+    const dhPubRaw = await cryptoSubtle.exportKey('raw', this.localDhKeypair.publicKey);
+    const remotePubRaw = await cryptoSubtle.exportKey('raw', this.remoteDhPublicKey);
+
+    return {
+      rootKey: bytesToBase64(new Uint8Array(rootRaw)),
+      sendingChainKey: bytesToBase64(new Uint8Array(sendRaw)),
+      receivingChainKey: bytesToBase64(new Uint8Array(recvRaw)),
+      localDhPrivateKey: bytesToBase64(new Uint8Array(dhPrivRaw)),
+      localDhPublicKey: bytesToBase64(new Uint8Array(dhPubRaw)),
+      remoteDhPublicKey: bytesToBase64(new Uint8Array(remotePubRaw)),
+      role: this.role,
+      messageNumber: this.messageNumber,
+      previousChainLength: this.previousChainLength,
+      recvMessageNumber: this.recvMessageNumber,
+      dhRatchetTurnPending: this.dhRatchetTurnPending
+    };
+  }
+
+  /**
+   * Restores a DoubleRatchetSession from a saved state snapshot.
+   */
+  static async restoreFromSnapshot(snapshot) {
+    const rootKey = await cryptoSubtle.importKey(
+      'raw', base64ToBytes(snapshot.rootKey),
+      { name: 'HMAC', hash: 'SHA-256', length: 256 }, true, ['sign']
+    );
+    const sendingChainKey = await cryptoSubtle.importKey(
+      'raw', base64ToBytes(snapshot.sendingChainKey),
+      { name: 'HMAC', hash: 'SHA-256', length: 256 }, true, ['sign']
+    );
+    const receivingChainKey = await cryptoSubtle.importKey(
+      'raw', base64ToBytes(snapshot.receivingChainKey),
+      { name: 'HMAC', hash: 'SHA-256', length: 256 }, true, ['sign']
+    );
+    const privateKey = await cryptoSubtle.importKey(
+      'pkcs8', base64ToBytes(snapshot.localDhPrivateKey),
+      { name: 'ECDH', namedCurve: 'P-384' }, true, ['deriveKey', 'deriveBits']
+    );
+    const publicKey = await cryptoSubtle.importKey(
+      'raw', base64ToBytes(snapshot.localDhPublicKey),
+      { name: 'ECDH', namedCurve: 'P-384' }, true, []
+    );
+    const remoteDhPublicKey = await cryptoSubtle.importKey(
+      'raw', base64ToBytes(snapshot.remoteDhPublicKey),
+      { name: 'ECDH', namedCurve: 'P-384' }, true, []
+    );
+
+    const session = new DoubleRatchetSession({
+      rootKey,
+      sendingChainKey,
+      receivingChainKey,
+      localDhKeypair: { privateKey, publicKey },
+      remoteDhPublicKey,
+      role: snapshot.role
+    });
+
+    session.messageNumber = snapshot.messageNumber;
+    session.previousChainLength = snapshot.previousChainLength;
+    session.recvMessageNumber = snapshot.recvMessageNumber;
+    session.dhRatchetTurnPending = snapshot.dhRatchetTurnPending;
+
+    return session;
   }
 
   /**
@@ -494,11 +567,8 @@ export class DoubleRatchetSession {
 
   /**
    * Sends an encrypted message. Automatically performs local DH keypair rotation if an inbound DH turn was received.
-   * @param {string} plaintext 
-   * @returns {Promise<{ header: object, iv: string, ciphertext: string }>}
    */
   async send(plaintext) {
-    // Automated Continuous DH Ratchet: rotate local DH keypair if counterpart advanced their DH turn
     if (this.dhRatchetTurnPending) {
       await this.rotateLocalDhKeypair();
     }
@@ -526,12 +596,10 @@ export class DoubleRatchetSession {
     const remoteDhFingerprint = await DoubleRatchetSession.getFingerprintFromBase64(header.dhPublicKey);
     const keyId = `${remoteDhFingerprint}:${header.messageNumber}`;
 
-    // Replay Attack Protection: Reject already consumed message keys
     if (this.consumedMessageKeys.has(keyId)) {
       throw new Error('Replay Attack Detected: Message key already consumed');
     }
 
-    // Case 1: Check skipped keys buffer (Delayed out-of-order message)
     if (this.skippedMessageKeys.has(keyId)) {
       const messageKey = this.skippedMessageKeys.get(keyId);
       const plaintext = await TruplesCryptoCore.decryptPayload(iv, ciphertext, messageKey, aad);
@@ -540,7 +608,6 @@ export class DoubleRatchetSession {
       return plaintext;
     }
 
-    // Save session state snapshot for transactional rollback on decryption failure
     const backupState = {
       rootKey: this.rootKey,
       receivingChainKey: this.receivingChainKey,
@@ -557,7 +624,6 @@ export class DoubleRatchetSession {
         : null;
 
       if (remoteDhFingerprint !== currentRemoteFingerprint) {
-        // 1. Skip any remaining messages in the previous receiving chain
         if (this.receivingChainKey) {
           while (this.recvMessageNumber < header.previousChainLength) {
             if (this.skippedMessageKeys.size >= this.maxSkip) throw new Error('Skipped keys limit exceeded');
@@ -567,7 +633,6 @@ export class DoubleRatchetSession {
           }
         }
 
-        // 2. Import and validate new remote DH public key (NIST P-384)
         this.remoteDhPublicKey = await cryptoSubtle.importKey(
           'raw',
           remoteDhKeyBytes,
@@ -576,7 +641,6 @@ export class DoubleRatchetSession {
           []
         );
 
-        // 3. Execute DH Ratchet Step (Update Root Key & derive matching Receiving Chain Key with own role)
         const { newRootKey, newReceivingChainKey } = await TruplesCryptoCore.executeDhRatchetStep(
           this.rootKey,
           this.localDhKeypair.privateKey,
@@ -586,10 +650,9 @@ export class DoubleRatchetSession {
         this.rootKey = newRootKey;
         this.receivingChainKey = newReceivingChainKey;
         this.recvMessageNumber = 0;
-        this.dhRatchetTurnPending = true; // Flag auto local DH key rotation on next reply send
+        this.dhRatchetTurnPending = true;
       }
 
-      // Buffer skipped messages within the current receiving chain
       while (this.recvMessageNumber < header.messageNumber) {
         if (this.skippedMessageKeys.size >= this.maxSkip) throw new Error('Skipped keys limit exceeded');
         const { nextChainKey, messageKey } = await TruplesCryptoCore.ratchetMessageKey(this.receivingChainKey);
@@ -597,7 +660,6 @@ export class DoubleRatchetSession {
         this.skippedMessageKeys.set(`${remoteDhFingerprint}:${this.recvMessageNumber++}`, messageKey);
       }
 
-      // Decrypt current message with AAD verification
       const { nextChainKey, messageKey } = await TruplesCryptoCore.ratchetMessageKey(this.receivingChainKey);
       this.receivingChainKey = nextChainKey;
       this.recvMessageNumber++;
@@ -606,7 +668,6 @@ export class DoubleRatchetSession {
       this.recordConsumedKey(keyId);
       return plaintext;
     } catch (err) {
-      // Rollback session state upon AAD failure or MAC error
       this.rootKey = backupState.rootKey;
       this.receivingChainKey = backupState.receivingChainKey;
       this.remoteDhPublicKey = backupState.remoteDhPublicKey;

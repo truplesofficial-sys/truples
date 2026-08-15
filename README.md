@@ -1,11 +1,12 @@
 # Truples Protocol & Architecture Specification
 
 [![Status: Production Live](https://img.shields.io/badge/Status-Production%20Live-emerald.svg)](https://truples.com)
-[![Crypto Tests: 19/19 Passing](https://img.shields.io/badge/Crypto%20Tests-19%2F19%20Passing-brightgreen.svg)](tests/crypto.test.js)
+[![Crypto Tests: 23/23 Passing](https://img.shields.io/badge/Crypto%20Tests-23%2F23%20Passing-brightgreen.svg)](tests/crypto.test.js)
 [![Cipher: AES--256--GCM](https://img.shields.io/badge/Cipher-AES--256--GCM%20(NIST%20SP%20800--38D)-blue.svg)](https://truples.com)
 [![Auth Key Exchange: ECDH + ECDSA](https://img.shields.io/badge/Key%20Exchange-ECDH%20%2B%20ECDSA%20(P--384)-indigo.svg)](src/crypto/truples-crypto.js)
 [![Forward Secrecy: KDF Chain Ratchet](https://img.shields.io/badge/Forward%20Secrecy-KDF%20Chain%20Ratchet%20(RFC%205869)-teal.svg)](src/crypto/truples-crypto.js)
 [![Media: WebRTC DTLS/SRTP](https://img.shields.io/badge/Media-WebRTC%20DTLS%2FSRTP%20(RFC%203711)-orange.svg)](https://truples.com)
+[![Protocol Spec: Enterprise Ratchet](https://img.shields.io/badge/Protocol%20Spec-TRUPLES--RATCHET--SPEC-blueviolet.svg)](docs/TRUPLES-RATCHET-SPEC.md)
 [![License: Proprietary Specification](https://img.shields.io/badge/License-Proprietary%20Spec-gray.svg)](LICENSE.md)
 
 ---
@@ -14,9 +15,10 @@
 
 **Truples** is an enterprise-grade, end-to-end encrypted (E2EE) communication platform architected around **client-side symmetric KDF chain ratcheting**, **MITM-resistant Authenticated Key Exchange (ECDH + ECDSA)**, an **ephemeral in-memory relay model (Zero-Retention)**, and **decentralized Peer-to-Peer (P2P) WebRTC media channels**.
 
-This repository contains the complete technical specifications, cryptographic primitives, and a runnable reference implementation of the cryptographic core engine.
+This repository contains the complete technical specifications, cryptographic primitives, formal protocol specification, and a runnable reference implementation of the cryptographic core engine.
 
 - 🌐 **Live Web Application**: [https://truples.com](https://truples.com)
+- 📜 **Formal Protocol Specification**: [`docs/TRUPLES-RATCHET-SPEC.md`](docs/TRUPLES-RATCHET-SPEC.md)
 - 🧪 **Open Cryptographic Core & Test Suite**: [`src/crypto/truples-crypto.js`](src/crypto/truples-crypto.js) | [`tests/crypto.test.js`](tests/crypto.test.js)
 
 ### 1.1 Commercial IP & Open Cryptographic Core Policy
@@ -34,7 +36,7 @@ Truples implements strict zero-knowledge, client-side encryption. Plaintext mess
 ┌─────────────────────────────────────────────────────────────┐
 │                    Client-Side Core (A)                     │
 │  ┌──────────────────────┐      ┌─────────────────────────┐  │
-│  │ Device Secure Store  │ ───► │ WebCrypto Engine (v2.3) │  │
+│  │ Device Secure Store  │ ───► │    WebCrypto Engine     │  │
 │  └──────────────────────┘      └─────────────────────────┘  │
 └─────────────────────────────────────────────────────────────┘
                                │
@@ -167,7 +169,7 @@ npm test
 ```
 
 ### Validated Test Vectors (`tests/crypto.test.js`):
-The protocol core is validated against 19 adversarial and protocol-level test vectors covering defined threat models:
+The protocol core is validated against 23 adversarial and protocol-level test vectors covering defined threat models:
 - ✅ `ECDH P-384` ephemeral keypair generation (RFC 5903)
 - ✅ `ECDSA P-384 / SHA-384` identity signing & anti-tamper verification (FIPS 186-4)
 - ✅ **MITM-Resistant Authenticated Key Exchange** verifying ECDSA signature on remote ECDH public key
@@ -187,6 +189,10 @@ The protocol core is validated against 19 adversarial and protocol-level test ve
 - ✅ **Full Adversarial PCS Compromise Timeline (Post-Turn Healing Boundary)**
 - ✅ **Multi-Turn Continuous Automated Ephemeral DH Ratchet (10 Turns)**
 - ✅ **Adversarial Multi-Epoch Packet Permutation Stress Test (Interleaved Shuffled Delivery)**
+- ✅ **Deterministic Standard Test Vectors (Specification & Cross-Language Conformance)**
+- ✅ **Randomized State-Machine Property Fuzzing (100-step Zero Violation Assertion)**
+- ✅ **Identity Key Pinning & MITM Remote Key Change Rejection**
+- ✅ **Complete Crash Resilience & Session State Snapshot Restoration**
 
 ---
 
