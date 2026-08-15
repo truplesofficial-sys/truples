@@ -1,5 +1,5 @@
 /**
- * Truples Cryptographic Core Reference Implementation (v2.3)
+ * Truples Cryptographic Core Reference Implementation (v2.4)
  * 
  * Fully compatible with:
  * - W3C WebCrypto API (Browser & Node.js Universal Runtime, zero external dependencies)
@@ -7,7 +7,7 @@
  * - FIPS 186-4 (ECDSA over NIST P-384 with SHA-384 for MITM-resistant authenticated key exchange)
  * - RFC 5903 (ECDH over NIST P-384 curve)
  * - RFC 5869 (HKDF with HMAC-SHA256)
- * - Symmetric KDF Chain Ratchet for strict Per-Message Forward Secrecy
+ * - Full Double Ratchet Core (Asymmetric DH Ratchet + Symmetric KDF Chain Ratchet)
  */
 
 const cryptoSubtle = typeof window !== 'undefined' && window.crypto?.subtle 
@@ -139,9 +139,9 @@ export class TruplesCryptoCore {
         info: new TextEncoder().encode('Truples-Root-Key-v2')
       },
       hkdfKey,
-      { name: 'AES-GCM', length: 256 },
+      { name: 'HMAC', hash: 'SHA-256', length: 256 },
       true,
-      ['encrypt', 'decrypt']
+      ['sign']
     );
 
     const chainKey = await cryptoSubtle.deriveKey(
@@ -189,6 +189,70 @@ export class TruplesCryptoCore {
     }
 
     return await this.deriveRootAndChainKeys(localEcdhPrivateKey, remoteEcdhPublicKey, dynamicSalt);
+  }
+
+  /**
+   * Executes an Asymmetric DH Ratchet Step upon conversational turn-taking (Post-Compromise Recovery).
+   * Ingests a new ephemeral ECDH shared secret to advance the Root Key and derive a new Sending/Receiving Chain.
+   * 
+   * @param {CryptoKey} currentRootKey 
+   * @param {CryptoKey} localNewEcdhPrivateKey 
+   * @param {CryptoKey} remoteNewEcdhPublicKey 
+   * @returns {Promise<{ newRootKey: CryptoKey, newChainKey: CryptoKey }>}
+   */
+  static async executeDhRatchetStep(currentRootKey, localNewEcdhPrivateKey, remoteNewEcdhPublicKey) {
+    // 1. Calculate new ephemeral DH shared secret
+    const newSharedBits = await cryptoSubtle.deriveBits(
+      { name: 'ECDH', public: remoteNewEcdhPublicKey },
+      localNewEcdhPrivateKey,
+      384
+    );
+
+    // 2. Export current root key bytes to act as HKDF salt
+    const rootKeyBytes = await cryptoSubtle.exportKey('raw', currentRootKey);
+
+    const hkdfKey = await cryptoSubtle.importKey(
+      'raw',
+      newSharedBits,
+      { name: 'HKDF' },
+      false,
+      ['deriveKey', 'deriveBits']
+    );
+
+    // Clean ephemeral memory
+    new Uint8Array(newSharedBits).fill(0);
+
+    // 3. Derive advanced Root Key
+    const newRootKey = await cryptoSubtle.deriveKey(
+      {
+        name: 'HKDF',
+        hash: 'SHA-256',
+        salt: new Uint8Array(rootKeyBytes),
+        info: new TextEncoder().encode('Truples-DH-Ratchet-Root-Step')
+      },
+      hkdfKey,
+      { name: 'HMAC', hash: 'SHA-256', length: 256 },
+      true,
+      ['sign']
+    );
+
+    // 4. Derive fresh Chain Key for the new conversation turn
+    const newChainKey = await cryptoSubtle.deriveKey(
+      {
+        name: 'HKDF',
+        hash: 'SHA-256',
+        salt: new Uint8Array(rootKeyBytes),
+        info: new TextEncoder().encode('Truples-DH-Ratchet-Chain-Step')
+      },
+      hkdfKey,
+      { name: 'HMAC', hash: 'SHA-256', length: 256 },
+      true,
+      ['sign']
+    );
+
+    new Uint8Array(rootKeyBytes).fill(0);
+
+    return { newRootKey, newChainKey };
   }
 
   /**
