@@ -13,8 +13,9 @@
  *   - Directional DH KDF Chain Separation (Alice.Send == Bob.Recv && Alice.Send != Alice.Recv)
  *   - AAD-Authenticated Header Binding with Strict Integer Range Validation
  *   - Bounded Replay Protection Cache with Transactional State Rollback on Tamper/Failure
- *   - Encrypted Session Snapshot Storage (AES-256-GCM sealed with Anti-Replay Monotonic Versioning)
- *   - Trust-On-First-Use (TOFU) Identity Pinning & 60-Digit Safety Number Enclave
+ *   - Encrypted Session Snapshot Storage (Including complete skipped & consumed key states)
+ *   - Persistent Monotonic Counter & Encrypted IdentityStore Enclave (Anti-Rollback & TOFU Pinning)
+ *   - Truples 60-Digit Verifiable Safety Number Fingerprinting
  */
 
 const cryptoSubtle = typeof window !== 'undefined' && window.crypto?.subtle 
@@ -430,8 +431,8 @@ export class TruplesCryptoCore {
   }
 
   /**
-   * Computes a 60-digit verifiable Safety Number (QR Code friendly) from two ECDSA Identity Keys.
-   * Standard 12 groups of 5 digits: XXXXX XXXXX XXXXX ...
+   * Computes a 60-digit verifiable Safety Number from two ECDSA Identity Keys (Truples Safety Number Standard).
+   * Formatted into 12 groups of 5 decimal digits: XXXXX XXXXX XXXXX ...
    * @param {CryptoKey} keyA 
    * @param {CryptoKey} keyB 
    * @returns {Promise<string>}
@@ -440,7 +441,6 @@ export class TruplesCryptoCore {
     const rawA = new Uint8Array(await cryptoSubtle.exportKey('raw', keyA));
     const rawB = new Uint8Array(await cryptoSubtle.exportKey('raw', keyB));
 
-    // Lexicographically sort identity keys to produce identical Safety Numbers regardless of who computes it
     const cmp = Buffer.compare ? Buffer.compare(Buffer.from(rawA), Buffer.from(rawB)) : (rawA[0] - rawB[0]);
     const first = cmp <= 0 ? rawA : rawB;
     const second = cmp <= 0 ? rawB : rawA;
@@ -449,7 +449,6 @@ export class TruplesCryptoCore {
     combined.set(first, 0);
     combined.set(second, first.length);
 
-    // Iterative SHA-512 hashing to derive high-entropy 60 digits
     let hash = await cryptoSubtle.digest('SHA-512', combined);
     for (let i = 0; i < 512; i++) {
       hash = await cryptoSubtle.digest('SHA-512', hash);
@@ -462,14 +461,36 @@ export class TruplesCryptoCore {
       digits += num.toString().padStart(5, '0');
     }
 
-    // Format into 12 blocks of 5 digits
     return digits.substring(0, 60).match(/.{1,5}/g).join(' ');
   }
 }
 
 /**
- * Trust-On-First-Use (TOFU) Identity Store Enclave
- * Protects against Man-In-The-Middle identity key change attacks.
+ * Persistent Secure Storage & Monotonic Counter Enclave
+ * Simulates OS-level Hardware Security Module / Keychain Monotonic Counter storage.
+ */
+export class PersistentStorageEnclave {
+  constructor() {
+    this.counters = new Map();
+    this.encryptedBlob = null;
+  }
+
+  getHighestVersion(sessionId) {
+    return this.counters.get(sessionId) || 0;
+  }
+
+  setHighestVersion(sessionId, version) {
+    const current = this.getHighestVersion(sessionId);
+    if (version < current) {
+      throw new Error('Anti-Rollback Violation: Counter cannot be decremented');
+    }
+    this.counters.set(sessionId, version);
+  }
+}
+
+/**
+ * Persistent Trust-On-First-Use (TOFU) Identity Store Enclave
+ * Supports full encrypted export and persistent restoration against app lifecycle resets.
  */
 export class IdentityStore {
   constructor() {
@@ -484,7 +505,6 @@ export class IdentityStore {
   async verifyOrTrustIdentity(peerId, identityPublicKey) {
     const fingerprint = await DoubleRatchetSession.getPublicKeyFingerprint(identityPublicKey);
     if (!this.trustedIdentities.has(peerId)) {
-      // First contact: Trust-On-First-Use (TOFU)
       this.trustedIdentities.set(peerId, fingerprint);
       return { status: 'TRUSTED_FIRST_USE', fingerprint };
     }
@@ -495,6 +515,19 @@ export class IdentityStore {
     }
 
     return { status: 'VERIFIED', fingerprint };
+  }
+
+  async exportEncrypted(deviceMasterKey) {
+    const data = JSON.stringify(Array.from(this.trustedIdentities.entries()));
+    return await TruplesCryptoCore.encryptPayload(data, deviceMasterKey);
+  }
+
+  static async restoreEncrypted(encryptedBlob, deviceMasterKey) {
+    const decryptedJson = await TruplesCryptoCore.decryptPayload(encryptedBlob.iv, encryptedBlob.ciphertext, deviceMasterKey);
+    const store = new IdentityStore();
+    const entries = JSON.parse(decryptedJson);
+    store.trustedIdentities = new Map(entries);
+    return store;
   }
 }
 
@@ -557,7 +590,7 @@ export class DoubleRatchetSession {
   }
 
   /**
-   * Exports full raw serializable state snapshot.
+   * Exports full raw serializable state snapshot including all skipped and consumed key buffers.
    */
   async exportRawSnapshot() {
     const rootRaw = await cryptoSubtle.exportKey('raw', this.rootKey);
@@ -566,6 +599,13 @@ export class DoubleRatchetSession {
     const dhPrivRaw = await cryptoSubtle.exportKey('pkcs8', this.localDhKeypair.privateKey);
     const dhPubRaw = await cryptoSubtle.exportKey('raw', this.localDhKeypair.publicKey);
     const remotePubRaw = await cryptoSubtle.exportKey('raw', this.remoteDhPublicKey);
+
+    // Export all skipped message keys as raw Base64 bytes
+    const exportedSkippedKeys = [];
+    for (const [keyId, cryptoKey] of this.skippedMessageKeys.entries()) {
+      const rawKey = await cryptoSubtle.exportKey('raw', cryptoKey);
+      exportedSkippedKeys.push([keyId, bytesToBase64(new Uint8Array(rawKey))]);
+    }
 
     return {
       rootKey: bytesToBase64(new Uint8Array(rootRaw)),
@@ -578,23 +618,20 @@ export class DoubleRatchetSession {
       messageNumber: this.messageNumber,
       previousChainLength: this.previousChainLength,
       recvMessageNumber: this.recvMessageNumber,
-      dhRatchetTurnPending: this.dhRatchetTurnPending
+      dhRatchetTurnPending: this.dhRatchetTurnPending,
+      skippedKeysEntries: exportedSkippedKeys,
+      consumedKeysEntries: Array.from(this.consumedMessageKeys.entries())
     };
   }
 
   /**
-   * Exports an encrypted, tamper-proof session snapshot sealed with device-specific master storage key.
+   * Exports an encrypted, tamper-proof session snapshot sealed with device master key.
    * Includes Monotonic Versioning and AAD binding to prevent Snapshot Replay / Rollback attacks.
-   * 
-   * @param {CryptoKey} deviceStorageKey 
-   * @param {number} monotonicVersion 
-   * @returns {Promise<{ iv: string, ciphertext: string, version: number }>}
    */
   async exportEncryptedSnapshot(deviceStorageKey, monotonicVersion = 1) {
     const rawState = await this.exportRawSnapshot();
     const jsonPayload = JSON.stringify(rawState);
     
-    // AAD binds the monotonic version counter to prevent replay of old snapshots
     const aad = new Uint8Array(8);
     new DataView(aad.buffer).setBigUint64(0, BigInt(monotonicVersion), false);
 
@@ -604,15 +641,14 @@ export class DoubleRatchetSession {
 
   /**
    * Restores a session from an encrypted snapshot with master device key validation and anti-rollback verification.
-   * 
-   * @param {{ iv: string, ciphertext: string, version: number }} encryptedSnapshot 
-   * @param {CryptoKey} deviceStorageKey 
-   * @param {number} minExpectedVersion 
-   * @returns {Promise<DoubleRatchetSession>}
    */
-  static async restoreFromEncryptedSnapshot(encryptedSnapshot, deviceStorageKey, minExpectedVersion = 1) {
-    if (encryptedSnapshot.version < minExpectedVersion) {
-      throw new Error('Anti-Rollback Replay Attack Detected: Snapshot version is older than minimum expected state.');
+  static async restoreFromEncryptedSnapshot(encryptedSnapshot, deviceStorageKey, persistentEnclave, sessionId) {
+    if (persistentEnclave && sessionId) {
+      const highestVersion = persistentEnclave.getHighestVersion(sessionId);
+      if (encryptedSnapshot.version < highestVersion) {
+        throw new Error('Anti-Rollback Replay Attack Detected: Snapshot version is older than highest accepted counter in secure enclave.');
+      }
+      persistentEnclave.setHighestVersion(sessionId, encryptedSnapshot.version);
     }
 
     const aad = new Uint8Array(8);
@@ -626,51 +662,11 @@ export class DoubleRatchetSession {
     );
 
     const snapshot = JSON.parse(decryptedJson);
-
-    const rootKey = await cryptoSubtle.importKey(
-      'raw', base64ToBytes(snapshot.rootKey),
-      { name: 'HMAC', hash: 'SHA-256', length: 256 }, true, ['sign']
-    );
-    const sendingChainKey = await cryptoSubtle.importKey(
-      'raw', base64ToBytes(snapshot.sendingChainKey),
-      { name: 'HMAC', hash: 'SHA-256', length: 256 }, true, ['sign']
-    );
-    const receivingChainKey = await cryptoSubtle.importKey(
-      'raw', base64ToBytes(snapshot.receivingChainKey),
-      { name: 'HMAC', hash: 'SHA-256', length: 256 }, true, ['sign']
-    );
-    const privateKey = await cryptoSubtle.importKey(
-      'pkcs8', base64ToBytes(snapshot.localDhPrivateKey),
-      { name: 'ECDH', namedCurve: 'P-384' }, true, ['deriveKey', 'deriveBits']
-    );
-    const publicKey = await cryptoSubtle.importKey(
-      'raw', base64ToBytes(snapshot.localDhPublicKey),
-      { name: 'ECDH', namedCurve: 'P-384' }, true, []
-    );
-    const remoteDhPublicKey = await cryptoSubtle.importKey(
-      'raw', base64ToBytes(snapshot.remoteDhPublicKey),
-      { name: 'ECDH', namedCurve: 'P-384' }, true, []
-    );
-
-    const session = new DoubleRatchetSession({
-      rootKey,
-      sendingChainKey,
-      receivingChainKey,
-      localDhKeypair: { privateKey, publicKey },
-      remoteDhPublicKey,
-      role: snapshot.role
-    });
-
-    session.messageNumber = snapshot.messageNumber;
-    session.previousChainLength = snapshot.previousChainLength;
-    session.recvMessageNumber = snapshot.recvMessageNumber;
-    session.dhRatchetTurnPending = snapshot.dhRatchetTurnPending;
-
-    return session;
+    return await DoubleRatchetSession.restoreFromSnapshot(snapshot);
   }
 
   /**
-   * Restores a session from a raw snapshot object.
+   * Restores a session from a raw snapshot object including skipped and consumed key states.
    */
   static async restoreFromSnapshot(snapshot) {
     const rootKey = await cryptoSubtle.importKey(
@@ -712,9 +708,24 @@ export class DoubleRatchetSession {
     session.recvMessageNumber = snapshot.recvMessageNumber;
     session.dhRatchetTurnPending = snapshot.dhRatchetTurnPending;
 
+    // Restore skipped keys
+    if (snapshot.skippedKeysEntries && Array.isArray(snapshot.skippedKeysEntries)) {
+      for (const [keyId, rawBase64] of snapshot.skippedKeysEntries) {
+        const msgKey = await cryptoSubtle.importKey(
+          'raw', base64ToBytes(rawBase64),
+          { name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt']
+        );
+        session.skippedMessageKeys.set(keyId, msgKey);
+      }
+    }
+
+    // Restore consumed keys
+    if (snapshot.consumedKeysEntries && Array.isArray(snapshot.consumedKeysEntries)) {
+      session.consumedMessageKeys = new Map(snapshot.consumedKeysEntries);
+    }
+
     return session;
   }
-
 
   /**
    * Performs an asymmetric DH Ratchet turn on send (Turn-Taking).
