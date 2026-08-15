@@ -1,12 +1,12 @@
 /**
  * Truples Enterprise Cryptographic Validation Suite
  * 
- * Comprehensive 27-Vector Adversarial, Fuzzing, TOFU, Safety Number & Persistence Framework:
+ * Comprehensive 28-Vector Adversarial, Fuzzing, TOFU, Safety Number, Rollback & Persistence Framework:
  * - Tests 1-7: Cryptographic Primitive Foundations (ECDH, ECDSA, KDF, AES-GCM, IV Isolation, Scrubbing)
  * - Tests 8-15: Double Ratchet State Machine (Directional DH, PCS, Out-of-Order, AAD Header, Replay)
  * - Tests 16-19: Adversarial Timelines, Continuous Multi-Turns & Packet Shuffling
  * - Tests 20-23: Deterministic Test Vectors, Property Fuzzing, Identity Defense & Crash Recovery
- * - Tests 24-27: Encrypted Snapshots (Skipped/Consumed Keys), Persistent TOFU Store, Byte Vectors & Adversarial Fuzzing
+ * - Tests 24-28: Encrypted Snapshots (Skipped/Consumed Keys), Persistent TOFU, Byte Vectors, Adversarial Tests & Temporal Rollback Defense
  * 
  * Run with: node tests/crypto.test.js
  */
@@ -15,7 +15,7 @@ const { TruplesCryptoCore, DoubleRatchetSession, IdentityStore, PersistentStorag
 const assert = require('assert');
 
 async function runCryptographicTestSuite() {
-  console.log('🧪 [TEST] Starting Truples Enterprise Cryptographic Validation Suite (27 Vectors)...\n');
+  console.log('🧪 [TEST] Starting Truples Enterprise Cryptographic Validation Suite (28 Vectors)...\n');
 
   // Test 1: ECDH Keypair Generation (NIST P-384)
   console.log('1️⃣ Testing Ephemeral ECDH Keypair Generation (P-384)...');
@@ -946,6 +946,7 @@ async function runCryptographicTestSuite() {
 
   console.log('========================================================================================');
   console.log('🎉 ALL 28 ENTERPRISE CRYPTOGRAPHIC, ROLLBACK, TOFU & PERSISTENCE TESTS PASSED (28/28)!');
+  console.log('📊 Summary: Tests: 28 | Passed: 28 | Failed: 0');
   console.log('========================================================================================');
 }
 
