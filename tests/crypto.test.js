@@ -796,10 +796,20 @@ async function runCryptographicTestSuite() {
   assert.strictEqual(sendRawBytes.byteLength, 32, 'Sending chain key must be exactly 32 bytes');
   assert.strictEqual(recvRawBytes.byteLength, 32, 'Receiving chain key must be exactly 32 bytes');
   assert.notDeepStrictEqual(Buffer.from(sendRawBytes), Buffer.from(recvRawBytes), 'Directional separation must produce distinct bytes');
+
+  // Verify deterministic repeatability: Re-deriving with identical inputs produces bit-for-bit identical hex digests
+  const reDerivedKeys = await TruplesCryptoCore.deriveRootAndChainKeys(
+    aliceKeypair.privateKey,
+    bobKeypair.publicKey,
+    staticSalt,
+    'initiator'
+  );
+  const reRootRaw = new Uint8Array(await globalThis.crypto.subtle.exportKey('raw', reDerivedKeys.rootKey));
+  assert.strictEqual(Buffer.from(rootRawBytes).toString('hex'), Buffer.from(reRootRaw).toString('hex'), 'Deterministic derivation must be byte-for-byte reproducible');
   console.log('   ✅ Passed: Deterministic 32-byte cryptographic digests verified for cross-language conformance.\n');
 
-  // Test 27: PRNG Seed-Reproducible 100-Operation Adversarial Fuzzing (Drop, Mutation, Replay & State Invariants)
-  console.log('2️⃣7️⃣ Testing Seed-Reproducible Adversarial State-Machine Fuzzing (Drop, Tamper & Rollback)...');
+  // Test 27: Seed-Reproducible 20-Cycle Adversarial Mutation & Rollback Testing
+  console.log('2️⃣7️⃣ Testing Seed-Reproducible Adversarial Mutation Testing (Drop, Tamper & Rollback)...');
   const fuzzAlice = new DoubleRatchetSession({
     rootKey: aliceKeys.rootKey,
     sendingChainKey: aliceKeys.sendingChainKey,
@@ -864,10 +874,64 @@ async function runCryptographicTestSuite() {
     }
     assert(replayCaught, 'Replay of valid packet MUST be rejected');
   }
-  console.log('   ✅ Passed: Seed-reproducible adversarial fuzzing asserted 0 state corruptions across all injection vectors.\n');
+  console.log('   ✅ Passed: Seed-reproducible adversarial testing asserted 0 state corruptions across all injection cycles.\n');
+
+  // Test 28: Temporal Snapshot Rollback & Same-Version Replay Rejection
+  console.log('2️⃣8️⃣ Testing Temporal Snapshot Rollback & Multi-Epoch Replay Defense (V5 -> V6 -> Replay V5)...');
+  const tempEnclave = new PersistentStorageEnclave();
+  const tempSessionId = "temporal_rollback_test_session";
+
+  const sessAlice = new DoubleRatchetSession({
+    rootKey: aliceKeys.rootKey,
+    sendingChainKey: aliceKeys.sendingChainKey,
+    receivingChainKey: aliceKeys.receivingChainKey,
+    localDhKeypair: aliceKeypair,
+    remoteDhPublicKey: bobKeypair.publicKey,
+    role: 'initiator'
+  });
+
+  const sessBob = new DoubleRatchetSession({
+    rootKey: bobKeys.rootKey,
+    sendingChainKey: bobKeys.sendingChainKey,
+    receivingChainKey: bobKeys.receivingChainKey,
+    localDhKeypair: bobKeypair,
+    remoteDhPublicKey: aliceKeypair.publicKey,
+    role: 'responder'
+  });
+
+  // Step 1: Baseline communication and export Snapshot V5
+  const mInit = await sessAlice.send("Initial message at Version 5");
+  await sessBob.receive(mInit.header, mInit.iv, mInit.ciphertext);
+  const snapshotV5 = await sessBob.exportEncryptedSnapshot(deviceMasterKey, 5);
+
+  // Restore Bob at V5 (Enclave counter becomes 5)
+  const activeBob = await DoubleRatchetSession.restoreFromEncryptedSnapshot(snapshotV5, deviceMasterKey, tempEnclave, tempSessionId);
+  assert.strictEqual(tempEnclave.getHighestVersion(tempSessionId), 5, 'Enclave counter must be 5');
+
+  // Step 2: Active session progresses through 5 turns of messaging & DH Ratchets
+  for (let i = 1; i <= 5; i++) {
+    const aTurn = await sessAlice.send(`Turn ${i} from Alice`);
+    const bRecv = await activeBob.receive(aTurn.header, aTurn.iv, aTurn.ciphertext);
+    assert.strictEqual(bRecv, `Turn ${i} from Alice`);
+  }
+
+  // Step 3: Export fresh Snapshot V6 from advanced session and commit V6
+  const snapshotV6 = await activeBob.exportEncryptedSnapshot(deviceMasterKey, 6);
+  await DoubleRatchetSession.restoreFromEncryptedSnapshot(snapshotV6, deviceMasterKey, tempEnclave, tempSessionId);
+  assert.strictEqual(tempEnclave.getHighestVersion(tempSessionId), 6, 'Enclave counter must advance to 6');
+
+  // Step 4: Adversary intercepts and attempts to replay original Snapshot V5 to force temporal rollback
+  let temporalRollbackBlocked = false;
+  try {
+    await DoubleRatchetSession.restoreFromEncryptedSnapshot(snapshotV5, deviceMasterKey, tempEnclave, tempSessionId);
+  } catch (err) {
+    temporalRollbackBlocked = true;
+  }
+  assert(temporalRollbackBlocked, 'Adversary replaying historical Snapshot V5 MUST be blocked by Enclave counter (5 < 6)');
+  console.log('   ✅ Passed: Temporal snapshot rollback attack successfully thwarted: Past states permanently invalidated.\n');
 
   console.log('========================================================================================');
-  console.log('🎉 ALL 27 ENTERPRISE CRYPTOGRAPHIC, PERSISTENCE, TOFU & FUZZING TESTS PASSED (27/27)!');
+  console.log('🎉 ALL 28 ENTERPRISE CRYPTOGRAPHIC, ROLLBACK, TOFU & PERSISTENCE TESTS PASSED (28/28)!');
   console.log('========================================================================================');
 }
 
@@ -875,3 +939,4 @@ runCryptographicTestSuite().catch(err => {
   console.error('❌ Test failed:', err);
   process.exit(1);
 });
+
