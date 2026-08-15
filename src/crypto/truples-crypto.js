@@ -1,18 +1,18 @@
 /**
- * Truples Cryptographic Core & Full Double Ratchet State Machine (v2.7)
+ * Truples Cryptographic Core & Full Double Ratchet State Machine (v2.8)
  * 
  * Fully compatible with:
  * - W3C WebCrypto API (Browser & Node.js Universal Runtime, zero external dependencies)
  * - NIST SP 800-38D (AES-GCM-256 with 96-bit CSPRNG IV & 128-bit MAC tag)
  * - FIPS 186-4 (ECDSA over NIST P-384 with SHA-384 for MITM-resistant authenticated key exchange)
- * - RFC 5903 (ECDH over NIST P-384 curve)
+ * - RFC 5903 (ECDH over NIST P-384 curve with uncompressed 97-byte 0x04 point validation)
  * - RFC 5869 (HKDF with HMAC-SHA256)
- * - Signal-Standard Full Double Ratchet Specification:
- *   - AAD-Authenticated Header Binding (Protects dhPublicKey, messageNumber, previousChainLength against tampering)
- *   - Atomic Transactional State Rollback on Decryption / Tamper Failure (Prevents State Pollution / DoS)
- *   - Role-Aware Initiator / Responder Directional Chain Alignment
- *   - Automated Ephemeral DH Ratchet State Machine
- *   - Multi-Epoch Bounded Skipped Message Key Management & Strict Replay Attack Protection
+ * - Enterprise Double Ratchet Specification:
+ *   - Continuous Automated DH Ratchet Turn-Taking (Auto local DH rotation upon remote turn)
+ *   - Directional DH KDF Chain Separation (Alice.Send == Bob.Recv && Alice.Send != Alice.Recv)
+ *   - AAD-Authenticated Header Binding with Strict Integer Validation
+ *   - Bounded LRU Replay Cache (Resource Exhaustion & DoS Defense)
+ *   - Atomic Transactional State Rollback on Decryption / Tamper Failure
  */
 
 const cryptoSubtle = typeof window !== 'undefined' && window.crypto?.subtle 
@@ -50,11 +50,29 @@ function base64ToBytes(base64) {
 }
 
 /**
- * Deterministic Canonical Serialization of Double Ratchet Headers for AES-GCM AAD Authentication.
+ * Validates and canonically encodes Double Ratchet Headers for AES-GCM AAD Authentication.
  * Binary format: [4-byte version] [4-byte pubKeyLength] [pubKeyBytes] [4-byte prevChainLength] [4-byte messageNum]
  */
 export function canonicalEncodeHeader(header) {
+  if (!header || typeof header !== 'object') {
+    throw new Error('Invalid header format: header must be an object');
+  }
+
+  const prevLen = header.previousChainLength;
+  const msgNum = header.messageNumber;
+
+  if (!Number.isInteger(prevLen) || prevLen < 0 || prevLen > 0xFFFFFFFF) {
+    throw new Error('Invalid header: previousChainLength must be a valid unsigned 32-bit integer');
+  }
+  if (!Number.isInteger(msgNum) || msgNum < 0 || msgNum > 0xFFFFFFFF) {
+    throw new Error('Invalid header: messageNumber must be a valid unsigned 32-bit integer');
+  }
+
   const pubKeyBytes = typeof header.dhPublicKey === 'string' ? base64ToBytes(header.dhPublicKey) : header.dhPublicKey;
+  if (!pubKeyBytes || pubKeyBytes.byteLength !== 97 || pubKeyBytes[0] !== 0x04) {
+    throw new Error('Invalid header: dhPublicKey must be a 97-byte uncompressed NIST P-384 point (0x04 prefix)');
+  }
+
   const buffer = new ArrayBuffer(4 + 4 + pubKeyBytes.byteLength + 4 + 4);
   const view = new DataView(buffer);
 
@@ -63,8 +81,8 @@ export function canonicalEncodeHeader(header) {
   new Uint8Array(buffer, 8, pubKeyBytes.byteLength).set(pubKeyBytes);
 
   const offset = 8 + pubKeyBytes.byteLength;
-  view.setUint32(offset, header.previousChainLength || 0, false);
-  view.setUint32(offset + 4, header.messageNumber || 0, false);
+  view.setUint32(offset, prevLen, false);
+  view.setUint32(offset + 4, msgNum, false);
 
   return new Uint8Array(buffer);
 }
@@ -96,9 +114,6 @@ export class TruplesCryptoCore {
 
   /**
    * Signs a payload or ephemeral public key using ECDSA P-384 (MITM Defense).
-   * @param {string|Uint8Array} data 
-   * @param {CryptoKey} privateKey 
-   * @returns {Promise<string>} Base64 signature
    */
   static async signPayload(data, privateKey) {
     const rawData = typeof data === 'string' ? new TextEncoder().encode(data) : data;
@@ -112,10 +127,6 @@ export class TruplesCryptoCore {
 
   /**
    * Verifies an ECDSA P-384 signature against remote public identity key.
-   * @param {string|Uint8Array} data 
-   * @param {string} signatureBase64 
-   * @param {CryptoKey} publicKey 
-   * @returns {Promise<boolean>}
    */
   static async verifySignature(data, signatureBase64, publicKey) {
     const rawData = typeof data === 'string' ? new TextEncoder().encode(data) : data;
@@ -130,11 +141,6 @@ export class TruplesCryptoCore {
 
   /**
    * Derives root and role-aligned directional chain keys using HKDF-SHA256.
-   * @param {CryptoKey} localPrivateKey 
-   * @param {CryptoKey} remotePublicKey 
-   * @param {Uint8Array} [dynamicSalt] 
-   * @param {'initiator'|'responder'} [role='initiator']
-   * @returns {Promise<{ rootKey: CryptoKey, sendingChainKey: CryptoKey, receivingChainKey: CryptoKey }>}
    */
   static async deriveRootAndChainKeys(localPrivateKey, remotePublicKey, dynamicSalt, role = 'initiator') {
     const salt = dynamicSalt || new Uint8Array(32);
@@ -228,9 +234,16 @@ export class TruplesCryptoCore {
   }
 
   /**
-   * Executes an Asymmetric DH Ratchet Step upon conversational turn-taking (Post-Compromise Recovery).
+   * Executes an Asymmetric DH Ratchet Step upon conversational turn-taking.
+   * Derives a new Root Key and strictly separated directional sending/receiving chains.
+   * 
+   * @param {CryptoKey} currentRootKey 
+   * @param {CryptoKey} localDhPrivateKey 
+   * @param {CryptoKey} remoteDhPublicKey 
+   * @param {'initiator'|'responder'} [role='initiator']
+   * @returns {Promise<{ newRootKey: CryptoKey, newSendingChainKey: CryptoKey, newReceivingChainKey: CryptoKey }>}
    */
-  static async executeDhRatchetStep(currentRootKey, localDhPrivateKey, remoteDhPublicKey) {
+  static async executeDhRatchetStep(currentRootKey, localDhPrivateKey, remoteDhPublicKey, role = 'initiator') {
     const newSharedBits = await cryptoSubtle.deriveBits(
       { name: 'ECDH', public: remoteDhPublicKey },
       localDhPrivateKey,
@@ -262,12 +275,25 @@ export class TruplesCryptoCore {
       ['sign']
     );
 
-    const newChainKey = await cryptoSubtle.deriveKey(
+    const initToRespChainKey = await cryptoSubtle.deriveKey(
       {
         name: 'HKDF',
         hash: 'SHA-256',
         salt: new Uint8Array(rootKeyBytes),
-        info: new TextEncoder().encode('Truples-DH-Ratchet-Chain-Step')
+        info: new TextEncoder().encode('Truples-DH-Ratchet-Init-To-Resp')
+      },
+      hkdfKey,
+      { name: 'HMAC', hash: 'SHA-256', length: 256 },
+      true,
+      ['sign']
+    );
+
+    const respToInitChainKey = await cryptoSubtle.deriveKey(
+      {
+        name: 'HKDF',
+        hash: 'SHA-256',
+        salt: new Uint8Array(rootKeyBytes),
+        info: new TextEncoder().encode('Truples-DH-Ratchet-Resp-To-Init')
       },
       hkdfKey,
       { name: 'HMAC', hash: 'SHA-256', length: 256 },
@@ -277,12 +303,21 @@ export class TruplesCryptoCore {
 
     new Uint8Array(rootKeyBytes).fill(0);
 
-    return { 
-      newRootKey, 
-      newChainKey, 
-      newSendingChainKey: newChainKey, 
-      newReceivingChainKey: newChainKey 
-    };
+    if (role === 'initiator') {
+      return { 
+        newRootKey, 
+        newSendingChainKey: initToRespChainKey, 
+        newReceivingChainKey: respToInitChainKey,
+        newChainKey: initToRespChainKey 
+      };
+    } else {
+      return { 
+        newRootKey, 
+        newSendingChainKey: respToInitChainKey, 
+        newReceivingChainKey: initToRespChainKey,
+        newChainKey: respToInitChainKey 
+      };
+    }
   }
 
   /**
@@ -389,7 +424,7 @@ export class TruplesCryptoCore {
 
 /**
  * Signal-Standard Full Double Ratchet Session State Machine
- * Integrates AAD-Authenticated Headers, Asymmetric DH Ratchets, Directional KDF Chains, and Multi-Epoch Skipped Keys.
+ * Features Automated Continuous DH Turn-Taking, Directional Chain Separation, AAD Header Binding & Bounded Replay Defense.
  */
 export class DoubleRatchetSession {
   constructor({
@@ -409,7 +444,9 @@ export class DoubleRatchetSession {
     this.messageNumber = 0;
     this.previousChainLength = 0;
     this.recvMessageNumber = 0;
-    this.consumedMessageKeys = new Set(); // Replay Protection Cache
+    this.dhRatchetTurnPending = false; // Trigger for auto local DH rotation upon remote DH receipt
+    this.consumedMessageKeys = new Map(); // Bounded LRU Cache: Key -> Timestamp
+    this.maxConsumedKeys = 5000;
     this.skippedMessageKeys = new Map();  // Key: `${dhFingerprint}:${messageNumber}`, Value: CryptoKey
     this.maxSkip = 1000;
   }
@@ -420,6 +457,17 @@ export class DoubleRatchetSession {
   }
 
   /**
+   * Records a consumed message key in the bounded LRU cache (Prevents unbounded memory growth).
+   */
+  recordConsumedKey(keyId) {
+    if (this.consumedMessageKeys.size >= this.maxConsumedKeys) {
+      const oldestKey = this.consumedMessageKeys.keys().next().value;
+      this.consumedMessageKeys.delete(oldestKey);
+    }
+    this.consumedMessageKeys.set(keyId, Date.now());
+  }
+
+  /**
    * Performs an asymmetric DH Ratchet turn on send (Turn-Taking).
    */
   async rotateLocalDhKeypair() {
@@ -427,20 +475,27 @@ export class DoubleRatchetSession {
     const { newRootKey, newSendingChainKey } = await TruplesCryptoCore.executeDhRatchetStep(
       this.rootKey,
       this.localDhKeypair.privateKey,
-      this.remoteDhPublicKey
+      this.remoteDhPublicKey,
+      this.role
     );
     this.rootKey = newRootKey;
     this.sendingChainKey = newSendingChainKey;
     this.previousChainLength = this.messageNumber;
     this.messageNumber = 0;
+    this.dhRatchetTurnPending = false;
   }
 
   /**
-   * Sends an encrypted message encapsulating the Double Ratchet Header bound via AES-GCM AAD.
+   * Sends an encrypted message. Automatically performs local DH keypair rotation if an inbound DH turn was received.
    * @param {string} plaintext 
    * @returns {Promise<{ header: object, iv: string, ciphertext: string }>}
    */
   async send(plaintext) {
+    // Automated Continuous DH Ratchet: rotate local DH keypair if counterpart advanced their DH turn
+    if (this.dhRatchetTurnPending) {
+      await this.rotateLocalDhKeypair();
+    }
+
     const { nextChainKey, messageKey } = await TruplesCryptoCore.ratchetMessageKey(this.sendingChainKey);
     this.sendingChainKey = nextChainKey;
 
@@ -458,15 +513,9 @@ export class DoubleRatchetSession {
 
   /**
    * Receives and decrypts a Double Ratchet message with AAD header authentication, replay rejection, and automatic DH ratchets.
-   * Features transactional rollback on authentication failure to prevent DoS/state corruption.
-   * 
-   * @param {object} header 
-   * @param {string} iv 
-   * @param {string} ciphertext 
-   * @returns {Promise<string>}
    */
   async receive(header, iv, ciphertext) {
-    const remoteDhKeyBytes = base64ToBytes(header.dhPublicKey);
+    const aad = canonicalEncodeHeader(header);
     const remoteDhFingerprint = header.dhPublicKey.substring(0, 24);
     const keyId = `${remoteDhFingerprint}:${header.messageNumber}`;
 
@@ -475,14 +524,12 @@ export class DoubleRatchetSession {
       throw new Error('Replay Attack Detected: Message key already consumed');
     }
 
-    const aad = canonicalEncodeHeader(header);
-
     // Case 1: Check skipped keys buffer (Delayed out-of-order message)
     if (this.skippedMessageKeys.has(keyId)) {
       const messageKey = this.skippedMessageKeys.get(keyId);
       const plaintext = await TruplesCryptoCore.decryptPayload(iv, ciphertext, messageKey, aad);
       this.skippedMessageKeys.delete(keyId);
-      this.consumedMessageKeys.add(keyId);
+      this.recordConsumedKey(keyId);
       return plaintext;
     }
 
@@ -492,11 +539,12 @@ export class DoubleRatchetSession {
       receivingChainKey: this.receivingChainKey,
       remoteDhPublicKey: this.remoteDhPublicKey,
       recvMessageNumber: this.recvMessageNumber,
+      dhRatchetTurnPending: this.dhRatchetTurnPending,
       skippedKeysEntries: Array.from(this.skippedMessageKeys.entries())
     };
 
     try {
-      // Check if remote party rotated their Ephemeral DH Key (New DH Ratchet Turn)
+      const remoteDhKeyBytes = base64ToBytes(header.dhPublicKey);
       const currentRemoteFingerprint = this.remoteDhPublicKey 
         ? await DoubleRatchetSession.getPublicKeyFingerprint(this.remoteDhPublicKey) 
         : null;
@@ -512,7 +560,7 @@ export class DoubleRatchetSession {
           }
         }
 
-        // 2. Import new remote DH public key
+        // 2. Import and validate new remote DH public key (NIST P-384)
         this.remoteDhPublicKey = await cryptoSubtle.importKey(
           'raw',
           remoteDhKeyBytes,
@@ -521,15 +569,17 @@ export class DoubleRatchetSession {
           []
         );
 
-        // 3. Execute DH Ratchet Step (Update Root Key & derive matching Receiving Chain Key)
+        // 3. Execute DH Ratchet Step (Update Root Key & derive matching Receiving Chain Key with own role)
         const { newRootKey, newReceivingChainKey } = await TruplesCryptoCore.executeDhRatchetStep(
           this.rootKey,
           this.localDhKeypair.privateKey,
-          this.remoteDhPublicKey
+          this.remoteDhPublicKey,
+          this.role
         );
         this.rootKey = newRootKey;
         this.receivingChainKey = newReceivingChainKey;
         this.recvMessageNumber = 0;
+        this.dhRatchetTurnPending = true; // Flag auto local DH key rotation on next reply send
       }
 
       // Buffer skipped messages within the current receiving chain
@@ -546,7 +596,7 @@ export class DoubleRatchetSession {
       this.recvMessageNumber++;
 
       const plaintext = await TruplesCryptoCore.decryptPayload(iv, ciphertext, messageKey, aad);
-      this.consumedMessageKeys.add(keyId);
+      this.recordConsumedKey(keyId);
       return plaintext;
     } catch (err) {
       // Rollback session state upon AAD failure or MAC error
@@ -554,6 +604,7 @@ export class DoubleRatchetSession {
       this.receivingChainKey = backupState.receivingChainKey;
       this.remoteDhPublicKey = backupState.remoteDhPublicKey;
       this.recvMessageNumber = backupState.recvMessageNumber;
+      this.dhRatchetTurnPending = backupState.dhRatchetTurnPending;
       this.skippedMessageKeys = new Map(backupState.skippedKeysEntries);
       throw err;
     }

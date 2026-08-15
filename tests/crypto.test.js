@@ -1,6 +1,6 @@
 /**
- * Truples Cryptographic Core Self-Testing Suite (v2.7)
- * Signal-Standard Full Double Ratchet with AAD Header Authentication & Replay Defense
+ * Truples Cryptographic Core Self-Testing Suite (v2.8)
+ * Full Double Ratchet State Machine & Negative Security Validation Suite
  * Run with: node tests/crypto.test.js
  */
 
@@ -8,7 +8,7 @@ const { TruplesCryptoCore, DoubleRatchetSession, canonicalEncodeHeader } = requi
 const assert = require('assert');
 
 async function runCryptographicTestSuite() {
-  console.log('🧪 [TEST] Starting Truples Full Double Ratchet Validation Suite (v2.7)...\n');
+  console.log('🧪 [TEST] Starting Truples Full Double Ratchet Validation Suite (v2.8)...\n');
 
   // Test 1: ECDH Keypair Generation (NIST P-384)
   console.log('1️⃣ Testing Ephemeral ECDH Keypair Generation (P-384)...');
@@ -147,21 +147,30 @@ async function runCryptographicTestSuite() {
   assert(sensitiveBuffer.every(b => b === 0), 'Buffer must be completely zeroized');
   console.log('   ✅ Passed: Multi-pass binary memory scrubbing verified.\n');
 
-  // Test 8: Asymmetric DH Ratchet Step & Byte-Level Root Key Equality
-  console.log('8️⃣ Testing Asymmetric DH Ratchet Step & Derived Root Key Equality...');
+  // Test 8: Asymmetric DH Ratchet Step & Directional Chain Separation Test
+  console.log('8️⃣ Testing Asymmetric DH Ratchet Step & Directional Chain Separation...');
   const bobNewTurnKeypair = await TruplesCryptoCore.generateECDHKeypair();
   const aliceNewTurnKeypair = await TruplesCryptoCore.generateECDHKeypair();
 
   const aliceRatchet = await TruplesCryptoCore.executeDhRatchetStep(aliceKeys.rootKey, aliceNewTurnKeypair.privateKey, bobNewTurnKeypair.publicKey, 'initiator');
   const bobRatchet = await TruplesCryptoCore.executeDhRatchetStep(bobKeys.rootKey, bobNewTurnKeypair.privateKey, aliceNewTurnKeypair.publicKey, 'responder');
 
-  // Direct byte-level comparison of new Root Keys after DH Ratchet
+  // 1. Direct byte-level comparison of new Root Keys
   const aliceRatchetRootRaw = await globalThis.crypto.subtle.exportKey('raw', aliceRatchet.newRootKey);
   const bobRatchetRootRaw = await globalThis.crypto.subtle.exportKey('raw', bobRatchet.newRootKey);
-  assert.deepStrictEqual(Buffer.from(aliceRatchetRootRaw), Buffer.from(bobRatchetRootRaw), 'Both parties must derive byte-identical Root Keys after Asymmetric DH Ratchet');
-  console.log('   ✅ Passed: Verified DH Ratchet state transition and byte-identical Root Key synchronization.\n');
+  assert.deepStrictEqual(Buffer.from(aliceRatchetRootRaw), Buffer.from(bobRatchetRootRaw), 'Both parties must derive byte-identical Root Keys');
 
-  // Test 9: Full Adversarial Post-Compromise Security (PCS) Recovery (RootKey + DH Private Key Theft)
+  // 2. Alice Sending === Bob Receiving
+  const aliceRatchetSendRaw = await globalThis.crypto.subtle.exportKey('raw', aliceRatchet.newSendingChainKey);
+  const bobRatchetRecvRaw = await globalThis.crypto.subtle.exportKey('raw', bobRatchet.newReceivingChainKey);
+  assert.deepStrictEqual(Buffer.from(aliceRatchetSendRaw), Buffer.from(bobRatchetRecvRaw), 'Alice newSendingChainKey must match Bob newReceivingChainKey');
+
+  // 3. Alice Sending !== Alice Receiving (Proves strict directional isolation)
+  const aliceRatchetRecvRaw = await globalThis.crypto.subtle.exportKey('raw', aliceRatchet.newReceivingChainKey);
+  assert.notDeepStrictEqual(Buffer.from(aliceRatchetSendRaw), Buffer.from(aliceRatchetRecvRaw), 'Alice Sending Chain must be distinct from Alice Receiving Chain');
+  console.log('   ✅ Passed: Verified DH Ratchet state transition and proved 3-way directional chain isolation.\n');
+
+  // Test 9: Full Adversarial Post-Compromise Security (PCS) Recovery
   console.log('9️⃣ Testing Full Adversarial Post-Compromise Security (PCS) Recovery...');
   const compromisedRootKey = aliceKeys.rootKey;
   const compromisedOldDhPrivateKey = aliceKeypair.privateKey;
@@ -242,27 +251,56 @@ async function runCryptographicTestSuite() {
   assert.strictEqual(aliceRecv1, "Hi Alice, received loud and clear! (Bob -> Alice)");
   console.log('   ✅ Passed: Verified true bidirectional message interchange between sessions.\n');
 
-  // Test 12: Automated Asymmetric DH Ratchet Turn-Taking
-  console.log('1️⃣2️⃣ Testing Automated Asymmetric DH Ratchet Turn-Taking & Epoch State Evolution...');
+  // Test 12: Continuous Automated Ephemeral DH Turn-Taking
+  console.log('1️⃣2️⃣ Testing Continuous Automated Ephemeral DH Turn-Taking State Machine...');
+  // Alice rotates local DH keypair and sends
   await aliceSession.rotateLocalDhKeypair();
+  const aliceTurn1 = await aliceSession.send("Alice Turn 1 after DH rotation");
+  
+  // Bob receives (Bob's session automatically flags dhRatchetTurnPending)
+  const bobTurn1 = await bobSession.receive(aliceTurn1.header, aliceTurn1.iv, aliceTurn1.ciphertext);
+  assert.strictEqual(bobTurn1, "Alice Turn 1 after DH rotation");
 
-  const alicePostDhMsg = await aliceSession.send("Turn-taking message after DH Ratchet rotation");
-  const bobPostDhRecv = await bobSession.receive(alicePostDhMsg.header, alicePostDhMsg.iv, alicePostDhMsg.ciphertext);
-  assert.strictEqual(bobPostDhRecv, "Turn-taking message after DH Ratchet rotation");
-  console.log('   ✅ Passed: Verified automated header-driven DH Ratchet state machine.\n');
+  // Bob simply replies: bobSession.send() automatically performs local DH rotation and advances turn!
+  const bobTurnReply = await bobSession.send("Bob automated reply with auto-rotated DH key");
+  const aliceRecvTurnReply = await aliceSession.receive(bobTurnReply.header, bobTurnReply.iv, bobTurnReply.ciphertext);
+  assert.strictEqual(aliceRecvTurnReply, "Bob automated reply with auto-rotated DH key");
+  console.log('   ✅ Passed: Proved fully automated continuous DH turn-taking without manual rotation calls.\n');
 
   // Test 13: Multi-Epoch Out-of-Order Delivery across Consecutive DH Ratchets
   console.log('1️⃣3️⃣ Testing Multi-Epoch Out-of-Order Delivery Across Consecutive DH Ratchets...');
-  const msgEpochA1 = await aliceSession.send("Epoch A - Message 1");
-  const msgEpochA2 = await aliceSession.send("Epoch A - Message 2 (Delayed across DH turn)");
+  const epochAlice = new DoubleRatchetSession({
+    rootKey: aliceKeys.rootKey,
+    sendingChainKey: aliceKeys.sendingChainKey,
+    receivingChainKey: aliceKeys.receivingChainKey,
+    localDhKeypair: aliceKeypair,
+    remoteDhPublicKey: bobKeypair.publicKey,
+    role: 'initiator'
+  });
 
-  await aliceSession.rotateLocalDhKeypair();
-  const msgEpochB1 = await aliceSession.send("Epoch B - Message 1");
+  const epochBob = new DoubleRatchetSession({
+    rootKey: bobKeys.rootKey,
+    sendingChainKey: bobKeys.sendingChainKey,
+    receivingChainKey: bobKeys.receivingChainKey,
+    localDhKeypair: bobKeypair,
+    remoteDhPublicKey: aliceKeypair.publicKey,
+    role: 'responder'
+  });
 
-  const recvB1 = await bobSession.receive(msgEpochB1.header, msgEpochB1.iv, msgEpochB1.ciphertext);
+  // Epoch A: Alice prepares two messages
+  const msgEpochA1 = await epochAlice.send("Epoch A - Message 1");
+  const msgEpochA2 = await epochAlice.send("Epoch A - Message 2 (Delayed across DH turn)");
+
+  // Alice rotates DH keypair, advancing to Epoch B
+  await epochAlice.rotateLocalDhKeypair();
+  const msgEpochB1 = await epochAlice.send("Epoch B - Message 1");
+
+  // Bob receives Epoch B message first (triggering DH ratchet and buffering unconsumed Epoch A messages)
+  const recvB1 = await epochBob.receive(msgEpochB1.header, msgEpochB1.iv, msgEpochB1.ciphertext);
   assert.strictEqual(recvB1, "Epoch B - Message 1");
 
-  const recvA2 = await bobSession.receive(msgEpochA2.header, msgEpochA2.iv, msgEpochA2.ciphertext);
+  // Bob receives delayed Epoch A Message 2 from previous DH epoch
+  const recvA2 = await epochBob.receive(msgEpochA2.header, msgEpochA2.iv, msgEpochA2.ciphertext);
   assert.strictEqual(recvA2, "Epoch A - Message 2 (Delayed across DH turn)");
   console.log('   ✅ Passed: Verified multi-epoch skipped key resolution across DH Ratchet boundaries.\n');
 
@@ -270,7 +308,7 @@ async function runCryptographicTestSuite() {
   console.log('1️⃣4️⃣ Testing Double Ratchet Header Tamper Rejection via AES-GCM AAD Binding...');
   const legitimateMsg = await aliceSession.send("Authenticity Guaranteed Message");
 
-  // Attack A: Adversary tampers with messageNumber (DoS / Sequence Manipulation Attack)
+  // Attack A: Adversary tampers with messageNumber
   const tamperedNumberHeader = { ...legitimateMsg.header, messageNumber: 999 };
   let tamperedNumberFailed = false;
   try {
@@ -280,7 +318,7 @@ async function runCryptographicTestSuite() {
   }
   assert(tamperedNumberFailed, 'Tampering with messageNumber in header MUST fail AES-GCM AAD authentication');
 
-  // Attack B: Adversary tampers with dhPublicKey (Malicious Epoch Injection)
+  // Attack B: Adversary tampers with dhPublicKey
   const fakeDhKey = await TruplesCryptoCore.generateECDHKeypair();
   const fakeRaw = await globalThis.crypto.subtle.exportKey('raw', fakeDhKey.publicKey);
   const tamperedDhHeader = { ...legitimateMsg.header, dhPublicKey: Buffer.from(fakeRaw).toString('base64') };
@@ -303,13 +341,11 @@ async function runCryptographicTestSuite() {
   assert(tamperedPrevLenFailed, 'Tampering with previousChainLength MUST fail AES-GCM AAD authentication');
   console.log('   ✅ Passed: Proved strict header integrity: AAD prevents all header tampering attacks.\n');
 
-  // Test 15: Strict Replay Attack Protection
-  console.log('1️⃣5️⃣ Testing Strict Replay Attack Protection...');
-  // Legitimate first receipt
+  // Test 15: Strict Replay Attack Protection & Transactional Rollback
+  console.log('1️⃣5️⃣ Testing Strict Replay Attack Protection & State Rollback...');
   const legitimateRecv = await bobSession.receive(legitimateMsg.header, legitimateMsg.iv, legitimateMsg.ciphertext);
   assert.strictEqual(legitimateRecv, "Authenticity Guaranteed Message");
 
-  // Replay Attack: Adversary resends identical legitimateMsg
   let replayBlocked = false;
   try {
     await bobSession.receive(legitimateMsg.header, legitimateMsg.iv, legitimateMsg.ciphertext);
@@ -319,8 +355,56 @@ async function runCryptographicTestSuite() {
   assert(replayBlocked, 'Replay of previously consumed message MUST be rejected with error');
   console.log('   ✅ Passed: Verified strict replay attack rejection for duplicate transmissions.\n');
 
+  // Test 16: Negative Protocol Security & Malformed Input Test Suite
+  console.log('1️⃣6️⃣ Testing Negative Protocol Security & Malformed Input Bounds...');
+  
+  // A: Malformed public key (invalid length)
+  let invalidKeyRejected = false;
+  try {
+    canonicalEncodeHeader({
+      dhPublicKey: Buffer.from([0x04, 1, 2, 3]).toString('base64'),
+      previousChainLength: 0,
+      messageNumber: 0
+    });
+  } catch (err) {
+    invalidKeyRejected = true;
+  }
+  assert(invalidKeyRejected, 'Malformed public key length must be rejected by canonical encoder');
+
+  // B: Header integer overflow / negative numbers
+  let invalidIntegerRejected = false;
+  try {
+    canonicalEncodeHeader({
+      dhPublicKey: legitimateMsg.header.dhPublicKey,
+      previousChainLength: -5,
+      messageNumber: 0
+    });
+  } catch (err) {
+    invalidIntegerRejected = true;
+  }
+  assert(invalidIntegerRejected, 'Negative header sequence numbers must be rejected');
+
+  // C: Bounded LRU Replay Cache Eviction (FIFO limit enforcement)
+  const testLruSession = new DoubleRatchetSession({
+    rootKey: aliceKeys.rootKey,
+    sendingChainKey: aliceKeys.sendingChainKey,
+    receivingChainKey: aliceKeys.receivingChainKey,
+    localDhKeypair: aliceKeypair,
+    remoteDhPublicKey: bobKeypair.publicKey
+  });
+  testLruSession.maxConsumedKeys = 3; // Lower bound for testing
+  testLruSession.recordConsumedKey('key-1');
+  testLruSession.recordConsumedKey('key-2');
+  testLruSession.recordConsumedKey('key-3');
+  assert(testLruSession.consumedMessageKeys.has('key-1'), 'key-1 should exist');
+  
+  testLruSession.recordConsumedKey('key-4'); // Triggers eviction of oldest ('key-1')
+  assert(!testLruSession.consumedMessageKeys.has('key-1'), 'key-1 must be evicted from bounded cache');
+  assert(testLruSession.consumedMessageKeys.has('key-4'), 'key-4 must exist in bounded cache');
+  console.log('   ✅ Passed: Verified strict P-384 point validation, integer bounds, and bounded LRU cache eviction.\n');
+
   console.log('========================================================================');
-  console.log('🎉 ALL 15 CRYPTOGRAPHIC, DOUBLE RATCHET, AAD & REPLAY TESTS PASSED!');
+  console.log('🎉 ALL 16 CRYPTOGRAPHIC, FULL DOUBLE RATCHET, AAD & NEGATIVE TESTS PASSED!');
   console.log('========================================================================');
 }
 
