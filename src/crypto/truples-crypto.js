@@ -1,12 +1,13 @@
 /**
- * Truples Cryptographic Core Reference Implementation (v2.1)
+ * Truples Cryptographic Core Reference Implementation (v2.2)
  * 
- * Complies with:
- * - NIST SP 800-38D (AES-GCM-256 with 96-bit random IV & 128-bit MAC tag)
+ * Fully compatible with:
+ * - W3C WebCrypto API (Browser & Node.js Universal Runtime, zero external dependencies)
+ * - NIST SP 800-38D (AES-GCM-256 with 96-bit CSPRNG IV & 128-bit MAC tag)
+ * - FIPS 186-4 (ECDSA over NIST P-384 with SHA-384 for MITM-resistant identity signatures)
  * - RFC 5903 (ECDH over NIST P-384 curve)
  * - RFC 5869 (HKDF with HMAC-SHA256)
  * - Symmetric KDF Chain Ratchet for strict Per-Message Forward Secrecy
- * - FIPS 140-3 zeroization standards for in-memory cryptographic buffers
  */
 
 const cryptoSubtle = typeof window !== 'undefined' && window.crypto?.subtle 
@@ -16,6 +17,32 @@ const cryptoSubtle = typeof window !== 'undefined' && window.crypto?.subtle
 const cryptoRandom = typeof window !== 'undefined' && window.crypto?.getRandomValues
   ? (buf) => window.crypto.getRandomValues(buf)
   : (buf) => (globalThis.crypto?.getRandomValues ? globalThis.crypto.getRandomValues(buf) : require('crypto').randomFillSync(buf));
+
+// Universal zero-dependency Base64 encoding/decoding (Native Browser & Node compatible)
+function bytesToBase64(bytes) {
+  if (typeof Buffer !== 'undefined') {
+    return Buffer.from(bytes).toString('base64');
+  }
+  let binary = '';
+  const len = bytes.byteLength;
+  for (let i = 0; i < len; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+}
+
+function base64ToBytes(base64) {
+  if (typeof Buffer !== 'undefined') {
+    return new Uint8Array(Buffer.from(base64, 'base64'));
+  }
+  const binaryString = atob(base64);
+  const len = binaryString.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+  return bytes;
+}
 
 export class TruplesCryptoCore {
   /**
@@ -31,8 +58,53 @@ export class TruplesCryptoCore {
   }
 
   /**
-   * Derives a root session key from local private & remote public key using HKDF-SHA256.
-   * Enforces dynamic 32-byte cryptographic salt.
+   * Generates a long-term ECDSA identity keypair over NIST P-384 with SHA-384 for identity verification.
+   * @returns {Promise<CryptoKeyPair>}
+   */
+  static async generateECDSAKeypair() {
+    return await cryptoSubtle.generateKey(
+      { name: 'ECDSA', namedCurve: 'P-384' },
+      true,
+      ['sign', 'verify']
+    );
+  }
+
+  /**
+   * Signs a payload or handshake token using ECDSA P-384 (MITM Defense).
+   * @param {string|Uint8Array} data 
+   * @param {CryptoKey} privateKey 
+   * @returns {Promise<string>} Base64 signature
+   */
+  static async signPayload(data, privateKey) {
+    const rawData = typeof data === 'string' ? new TextEncoder().encode(data) : data;
+    const signatureBuffer = await cryptoSubtle.sign(
+      { name: 'ECDSA', hash: { name: 'SHA-384' } },
+      privateKey,
+      rawData
+    );
+    return bytesToBase64(new Uint8Array(signatureBuffer));
+  }
+
+  /**
+   * Verifies an ECDSA P-384 signature against remote public identity key.
+   * @param {string|Uint8Array} data 
+   * @param {string} signatureBase64 
+   * @param {CryptoKey} publicKey 
+   * @returns {Promise<boolean>}
+   */
+  static async verifySignature(data, signatureBase64, publicKey) {
+    const rawData = typeof data === 'string' ? new TextEncoder().encode(data) : data;
+    const signatureBytes = base64ToBytes(signatureBase64);
+    return await cryptoSubtle.verify(
+      { name: 'ECDSA', hash: { name: 'SHA-384' } },
+      publicKey,
+      signatureBytes,
+      rawData
+    );
+  }
+
+  /**
+   * Derives root and initial chain keys using HKDF-SHA256 with dynamic CSPRNG salt.
    * @param {CryptoKey} localPrivateKey 
    * @param {CryptoKey} remotePublicKey 
    * @param {Uint8Array} [dynamicSalt] 
@@ -56,7 +128,7 @@ export class TruplesCryptoCore {
       ['deriveKey', 'deriveBits']
     );
 
-    // Scrub raw shared secret bits immediately from memory
+    // Best-effort in-memory wipe of raw shared secret bits
     new Uint8Array(sharedBits).fill(0);
 
     const rootKey = await cryptoSubtle.deriveKey(
@@ -90,12 +162,10 @@ export class TruplesCryptoCore {
 
   /**
    * Executes a symmetric KDF Chain Ratchet step (Per-Message Forward Secrecy).
-   * Derives a one-time Message Key and advances the Chain Key, zeroizing previous states.
    * @param {CryptoKey} currentChainKey 
    * @returns {Promise<{ nextChainKey: CryptoKey, messageKey: CryptoKey }>}
    */
   static async ratchetMessageKey(currentChainKey) {
-    // Export raw key bits of current chain key
     const chainKeyData = await cryptoSubtle.exportKey('raw', currentChainKey);
     const hkdfKey = await cryptoSubtle.importKey(
       'raw',
@@ -105,7 +175,6 @@ export class TruplesCryptoCore {
       ['deriveKey', 'deriveBits']
     );
 
-    // 1. Advance to Next Chain Key (Info: 'Truples-Chain-Step')
     const nextChainKey = await cryptoSubtle.deriveKey(
       {
         name: 'HKDF',
@@ -119,7 +188,6 @@ export class TruplesCryptoCore {
       ['sign']
     );
 
-    // 2. Derive One-Time Ephemeral Message Key (Info: 'Truples-Message-Key')
     const messageKey = await cryptoSubtle.deriveKey(
       {
         name: 'HKDF',
@@ -133,7 +201,6 @@ export class TruplesCryptoCore {
       ['encrypt', 'decrypt']
     );
 
-    // Zeroize raw buffer
     new Uint8Array(chainKeyData).fill(0);
 
     return { nextChainKey, messageKey };
@@ -157,8 +224,8 @@ export class TruplesCryptoCore {
     );
 
     return {
-      iv: Buffer.from(iv).toString('base64'),
-      ciphertext: Buffer.from(encryptedBuffer).toString('base64')
+      iv: bytesToBase64(iv),
+      ciphertext: bytesToBase64(new Uint8Array(encryptedBuffer))
     };
   }
 
@@ -170,8 +237,8 @@ export class TruplesCryptoCore {
    * @returns {Promise<string>} Decrypted UTF-8 plaintext
    */
   static async decryptPayload(ivBase64, ciphertextBase64, messageKey) {
-    const iv = new Uint8Array(Buffer.from(ivBase64, 'base64'));
-    const ciphertext = new Uint8Array(Buffer.from(ciphertextBase64, 'base64'));
+    const iv = base64ToBytes(ivBase64);
+    const ciphertext = base64ToBytes(ciphertextBase64);
 
     const decryptedBuffer = await cryptoSubtle.decrypt(
       { name: 'AES-GCM', iv: iv, tagLength: 128 },
@@ -183,7 +250,8 @@ export class TruplesCryptoCore {
   }
 
   /**
-   * Executes multi-pass cryptographic zeroization on in-memory buffers.
+   * Best-effort in-memory buffer scrubbing for typed arrays.
+   * Note: JS runtimes with garbage collectors cannot guarantee elimination of immutable string copies.
    * @param {Uint8Array} buffer 
    */
   static zeroizeBuffer(buffer) {

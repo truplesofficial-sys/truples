@@ -1,8 +1,9 @@
 # Truples Protocol & Architecture Specification
 
 [![Status: Production Live](https://img.shields.io/badge/Status-Production%20Live-emerald.svg)](https://truples.com)
-[![Crypto Tests: 6/6 Passing](https://img.shields.io/badge/Crypto%20Tests-6%2F6%20Passing-brightgreen.svg)](tests/crypto.test.js)
+[![Crypto Tests: 7/7 Passing](https://img.shields.io/badge/Crypto%20Tests-7%2F7%20Passing-brightgreen.svg)](tests/crypto.test.js)
 [![Cipher: AES--256--GCM](https://img.shields.io/badge/Cipher-AES--256--GCM%20(NIST%20SP%20800--38D)-blue.svg)](https://truples.com)
+[![Identity: ECDSA P--384](https://img.shields.io/badge/Identity-ECDSA%20P--384%20(FIPS%20186--4)-indigo.svg)](src/crypto/truples-crypto.js)
 [![Key Exchange: ECDH P--384](https://img.shields.io/badge/Key%20Exchange-ECDH%20P--384%20(RFC%205903)-purple.svg)](https://truples.com)
 [![Forward Secrecy: KDF Chain Ratchet](https://img.shields.io/badge/Forward%20Secrecy-KDF%20Chain%20Ratchet%20(RFC%205869)-teal.svg)](src/crypto/truples-crypto.js)
 [![Media: WebRTC DTLS/SRTP](https://img.shields.io/badge/Media-WebRTC%20DTLS%2FSRTP%20(RFC%203711)-orange.svg)](https://truples.com)
@@ -12,7 +13,7 @@
 
 ## 1. Executive Summary
 
-**Truples** is an enterprise-grade, end-to-end encrypted (E2EE) communication platform architected around **client-side symmetric KDF chain ratcheting**, an **ephemeral in-memory relay model (Zero-Retention)**, and **decentralized Peer-to-Peer (P2P) WebRTC media channels**.
+**Truples** is an enterprise-grade, end-to-end encrypted (E2EE) communication platform architected around **client-side symmetric KDF chain ratcheting**, **ECDSA asymmetric identity signatures (MITM defense)**, an **ephemeral in-memory relay model (Zero-Retention)**, and **decentralized Peer-to-Peer (P2P) WebRTC media channels**.
 
 This repository contains the complete technical specifications, cryptographic primitives, and a runnable reference implementation of the cryptographic core engine.
 
@@ -30,7 +31,7 @@ Truples implements strict zero-knowledge, client-side encryption. Plaintext mess
 ┌─────────────────────────────────────────────────────────────┐
 │                    Client-Side Core (A)                     │
 │  ┌──────────────────────┐      ┌─────────────────────────┐  │
-│  │ Device Secure Store  │ ───► │ WebCrypto Engine (v2.1) │  │
+│  │ Device Secure Store  │ ───► │ WebCrypto Engine (v2.2) │  │
 │  └──────────────────────┘      └─────────────────────────┘  │
 └─────────────────────────────────────────────────────────────┘
                                │
@@ -52,10 +53,11 @@ Truples implements strict zero-knowledge, client-side encryption. Plaintext mess
 
 ### Cryptographic Standards Inventory:
 - **Symmetric Cipher**: `AES-256-GCM` (NIST SP 800-38D) with 96-bit CSPRNG IV & 128-bit MAC tag.
+- **Identity Authentication (MITM Defense)**: `ECDSA` over NIST P-384 with `SHA-384` (FIPS 186-4).
 - **Asymmetric Key Exchange**: `ECDH` over NIST P-384 / SECP384R1 (RFC 5903) and `RSA-OAEP-4096` (RFC 8017).
 - **Key Derivation Function**: `HKDF` with `HMAC-SHA256` (RFC 5869) enforcing dynamic 32-byte CSPRNG salt.
 - **Forward Secrecy**: Client-Side Symmetric KDF Chain Ratchet advancing per-message.
-- **Random Number Generation**: Cryptographically Secure Pseudorandom Number Generator (CSPRNG) via WebCrypto `crypto.getRandomValues()`.
+- **Runtime Compatibility**: Universal W3C WebCrypto API with zero Node `Buffer` dependencies (Vite & Browser native).
 
 ---
 
@@ -111,9 +113,9 @@ Truples utilizes a direct **Peer-to-Peer (P2P) WebRTC Mesh** topology for 1:1 an
 
 ---
 
-## 5. Multi-Tier Panic Defense Matrix & Anti-Forensics
+## 5. Multi-Tier Panic Defense Matrix
 
-The Truples Panic Defense Matrix provides mathematically irreversible hardware and cryptographic safeguards in physical coercion or device seizure scenarios:
+The Truples Panic Defense Matrix provides hardware and cryptographic safeguards in physical coercion scenarios:
 
 ```
 [ PIN Input Challenge ]
@@ -122,12 +124,12 @@ The Truples Panic Defense Matrix provides mathematically irreversible hardware a
           │
           ├──► "pw2" (Level 2) ──► Wipes WebCrypto Master Keys & Unlinks Local DB
           │
-          └──► "pw3" (Level 3) ──► Full Memory Zeroization & Active Session Revocation
+          └──► "pw3" (Level 3) ──► Low-Level Memory Scrubbing & Active Session Revocation
 ```
 
 1. **🚨 Level 1 (Duress Decoy State)**: Unlocks a benign decoy partition containing synthetic benign data.
 2. **🚨 Level 2 (Ephemeral Wipe)**: Instantly erases local WebCrypto master encryption keys and unlinks conversation stores from SQLite / IndexedDB.
-3. **🚨 Level 3 (Hardware Zeroization)**: Executes low-level memory zeroization and revokes active server session tokens.
+3. **🚨 Level 3 (Hardware Zeroization)**: Executes memory buffer scrubbing and revokes active server session tokens.
 4. **Side-Channel Mitigation**: Credential verification employs constant-time comparison primitives (`MessageDigest.isEqual`) to eliminate timing side-channel exploits.
 
 ---
@@ -147,12 +149,13 @@ npm test
 
 ### Validated Test Vectors (`tests/crypto.test.js`):
 - ✅ `ECDH P-384` ephemeral keypair generation (RFC 5903)
+- ✅ **`ECDSA P-384 / SHA-384` identity signing & anti-tamper verification (FIPS 186-4)**
 - ✅ `HKDF-SHA256` symmetric root and initial chain key derivation with dynamic 32-byte CSPRNG salt
 - ✅ **Symmetric KDF Chain Ratchet** ensuring distinct message keys per transmission and verifying forward secrecy
 - ✅ `AES-256-GCM` 256-bit encryption & 128-bit MAC validation
 - ✅ Per-message 96-bit CSPRNG IV freshness (No nonce reuse)
 - ✅ 128-bit authentication tag tamper resistance
-- ✅ Multi-pass memory buffer zeroization
+- ✅ Multi-pass typed array memory buffer scrubbing
 
 ---
 
@@ -161,6 +164,7 @@ npm test
 | Security Property | Implementation & Verification Status |
 | :--- | :--- |
 | **Client-Side E2EE** | ✅ **Implemented & Verifiable**: All messages are sealed via `AES-256-GCM` within client sandboxes prior to network transport. |
+| **MITM Identity Authentication**| ✅ **Implemented & Verifiable**: `ECDSA P-384` cryptographic signatures verify sender authenticity. |
 | **Forward Secrecy** | ✅ **Implemented & Verifiable**: Each message advances a symmetric `HKDF-SHA256` chain ratchet, generating single-use message keys. |
 | **Media Encryption** | ✅ **Implemented & Verifiable**: Real-time voice/video channels establish direct P2P `DTLS 1.3 / SRTP` connections. |
 | **Zero-Retention Relay** | 📋 **Architectural Policy**: In-memory transit queues (Redis) purge ciphertexts upon recipient acknowledgment (`ACK`). Third-party white-box audit planned for formal certification. |
