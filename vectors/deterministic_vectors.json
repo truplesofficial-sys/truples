@@ -6,18 +6,22 @@
   "kdf": "HKDF-HMAC-SHA256",
   "test_vectors": [
     {
-      "description": "Deterministic 113-Byte Canonical Header AAD",
+      "vector_id": "VEC-AAD-001",
+      "description": "Deterministic 113-Byte Canonical Header AAD Binding",
       "input": {
         "version": 1,
         "publicKeyLength": 97,
+        "dhPublicKey_hex_prefix": "040102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
         "previousChainLength": 42,
         "messageNumber": 108
       },
       "expected_aad_byte_length": 113,
-      "expected_aad_hex_prefix": "000000010000006104"
+      "expected_aad_hex_prefix": "00000001000000610401020304050607",
+      "expected_aad_hex_suffix": "0000002a0000006c"
     },
     {
-      "description": "Role-Aware Directional KDF Derivation",
+      "vector_id": "VEC-KDF-DIR-002",
+      "description": "Role-Aware Directional KDF Derivation (32-Byte Exact Digests)",
       "input": {
         "salt_hex": "5555555555555555555555555555555555555555555555555555555555555555",
         "info_root": "Truples-Root-Key",
@@ -26,7 +30,19 @@
       },
       "expected_root_key_bits": 256,
       "expected_chain_key_bits": 256,
-      "directional_isolation_assert": "SendChain !== RecvChain"
+      "directional_invariance": {
+        "initiator_send_equals_responder_recv": true,
+        "initiator_recv_equals_responder_send": true,
+        "initiator_send_not_equal_initiator_recv": true
+      }
+    },
+    {
+      "vector_id": "VEC-SAFETY-003",
+      "description": "Truples 60-Digit Safety Number Canonical Fingerprint",
+      "algorithm": "SHA-512^512 over lexicographically sorted raw P-384 ECDSA keys",
+      "format": "12 groups of 5 decimal digits (71 characters including spaces)",
+      "validation_regex": "^(\\d{5} ){11}\\d{5}$",
+      "order_invariant_assert": "SafetyNumber(KeyA, KeyB) === SafetyNumber(KeyB, KeyA)"
     }
   ]
 }
