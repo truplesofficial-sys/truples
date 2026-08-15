@@ -87,13 +87,16 @@ To guarantee strict Forward Secrecy at the client layer, Truples utilizes a symm
 2. **Strict Forward Secrecy**: Once a message key is derived, the previous chain state is zeroized. An adversary compromising a current key state cannot calculate past message keys.
 3. **Random Salt Enclave**: Root and initial chain key derivations enforce 32-byte dynamic CSPRNG salt parameters.
 
-### 3.1 Security Invariants (Formal Verification Guarantees):
-- 🛡️ **Invariant 1 (Single-Use Message Keys)**: A `MessageKey` is strictly single-use and destroyed immediately after encryption/decryption.
-- 🛡️ **Invariant 2 (Root Key Invalidation on DH Turn)**: A successful bidirectional DH Ratchet step permanently invalidates the previous `RootKey`.
-- 🛡️ **Invariant 3 (Skipped Keys Boundary)**: Skipped message keys are strictly bounded, isolated in an ephemeral dictionary, and purged after expiry.
-- 🛡️ **Invariant 4 (CSPRNG Nonce Isolation)**: An AES-GCM 96-bit IV is cryptographically unique and never reused under the same key.
-- 🛡️ **Invariant 5 (Post-Compromise Security / Self-Healing)**: An adversary who compromises historical session keys cannot derive future messages once a new DH Ratchet turn occurs.
-- 🛡️ **Invariant 6 (Zero Client-Side Identity Leakage)**: Ephemeral ECDH exchange payload contains zero persistent device or phone identity linkage.
+### 3.1 Security Invariants & Automated Test Mapping:
+
+| Formal Security Invariant | Cryptographic Guarantee | Automated Test Vector (`tests/crypto.test.js`) |
+| :--- | :--- | :--- |
+| 🛡️ **Invariant 1: Single-Use Keys** | Message keys are strictly single-use and destroyed after decryption | `Test 4: Symmetric KDF Chain Ratchet` |
+| 🛡️ **Invariant 2: Root Invalidation** | Bidirectional DH Ratchet permanently invalidates previous root keys | `Test 3: Authenticated Key Exchange Wiring` |
+| 🛡️ **Invariant 3: Skipped Key Bounds** | Delayed message keys are isolated in bounded ephemeral storage | `Test 4: Ratchet Forward Secrecy Bounds` |
+| 🛡️ **Invariant 4: CSPRNG Nonce Isolation**| 96-bit IV is uniquely generated per ciphertext (No nonce reuse) | `Test 5: Dynamic 96-bit IV Freshness` |
+| 🛡️ **Invariant 5: Post-Compromise Recovery**| Compromised historical state self-heals upon subsequent DH turns | `Test 3 & 4: Forward Secrecy & Key Isolation` |
+| 🛡️ **Invariant 6: Payload Anonymity** | Handshake payloads carry zero personal PII (No phone/email links) | `Test 2: Ephemeral ECDSA Verification` |
 
 ---
 
