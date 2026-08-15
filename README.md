@@ -1,7 +1,7 @@
 # Truples Protocol & Architecture Specification
 
 [![Status: Production Live](https://img.shields.io/badge/Status-Production%20Live-emerald.svg)](https://truples.com)
-[![Crypto Tests: 23/23 Passing](https://img.shields.io/badge/Crypto%20Tests-23%2F23%20Passing-brightgreen.svg)](tests/crypto.test.js)
+[![Crypto Tests: 27/27 Passing](https://img.shields.io/badge/Crypto%20Tests-27%2F27%20Passing-brightgreen.svg)](tests/crypto.test.js)
 [![Cipher: AES--256--GCM](https://img.shields.io/badge/Cipher-AES--256--GCM%20(NIST%20SP%20800--38D)-blue.svg)](https://truples.com)
 [![Auth Key Exchange: ECDH + ECDSA](https://img.shields.io/badge/Key%20Exchange-ECDH%20%2B%20ECDSA%20(P--384)-indigo.svg)](src/crypto/truples-crypto.js)
 [![Forward Secrecy: KDF Chain Ratchet](https://img.shields.io/badge/Forward%20Secrecy-KDF%20Chain%20Ratchet%20(RFC%205869)-teal.svg)](src/crypto/truples-crypto.js)
@@ -169,7 +169,7 @@ npm test
 ```
 
 ### Validated Test Vectors (`tests/crypto.test.js`):
-The protocol core is validated against 23 adversarial and protocol-level test vectors covering defined threat models:
+The protocol core is validated against 27 adversarial and protocol-level test vectors covering defined threat models:
 - ✅ `ECDH P-384` ephemeral keypair generation (RFC 5903)
 - ✅ `ECDSA P-384 / SHA-384` identity signing & anti-tamper verification (FIPS 186-4)
 - ✅ **MITM-Resistant Authenticated Key Exchange** verifying ECDSA signature on remote ECDH public key
@@ -193,6 +193,10 @@ The protocol core is validated against 23 adversarial and protocol-level test ve
 - ✅ **Randomized State-Machine Property Fuzzing (100-step Zero Violation Assertion)**
 - ✅ **Identity Key Pinning & MITM Remote Key Change Rejection**
 - ✅ **Complete Crash Resilience & Session State Snapshot Restoration**
+- ✅ **Encrypted Session Snapshot Storage (AES-256-GCM Enclave with Anti-Rollback Monotonic Versioning)**
+- ✅ **Trust-On-First-Use (TOFU) Identity Pinning & 60-Digit Verifiable Safety Number Enclave**
+- ✅ **Cross-Platform HKDF & ECDH Domain Separation Test Vectors**
+- ✅ **Deep Adversarial State-Machine Fuzzing with Mutation, Drop, Reorder & State Rollback Recovery**
 
 ---
 

@@ -82,6 +82,30 @@ When an inbound message contains a new `DHr`, the session executes an asymmetric
      NewReceivingChainKey = HKDF(IKM = SharedSecret, Salt = OldRootKey, info = "Truples-DH-Ratchet-Init-To-Resp")
 ```
 
+### 4.4 Encrypted Session Snapshot & Anti-Rollback Storage
+
+To guarantee persistence across application lifecycle transitions without exposing plaintext key material:
+
+```text
+EncryptedSnapshot = AES-256-GCM(
+  Key = DeviceMasterKey,
+  IV = 96-bit CSPRNG Nonce,
+  Plaintext = JSON.stringify(SessionStateRaw),
+  AAD = 64-bit Monotonic Version Counter
+)
+```
+
+Restoration aborts with immediate error if `Snapshot.Version < MinimumExpectedVersion` (Anti-Rollback defense).
+
+### 4.5 Verifiable 60-Digit Safety Number (Identity Pinning)
+
+```text
+1. Sort(IdentityKeyA.Raw, IdentityKeyB.Raw) -> (KeyFirst, KeySecond)
+2. Digest = SHA-512^512(KeyFirst || KeySecond)
+3. Derive 12 blocks of 5 decimal digits from 30 bytes of digest material
+4. Format: "XXXXX XXXXX XXXXX XXXXX XXXXX XXXXX XXXXX XXXXX XXXXX XXXXX XXXXX XXXXX"
+```
+
 ---
 
 ## 5. Formal Security Invariants
@@ -92,3 +116,5 @@ When an inbound message contains a new `DHr`, the session executes an asymmetric
 4. **Header Authenticity**: Altering any bit of `dhPublicKey`, `previousChainLength`, or `messageNumber` causes immediate AES-GCM MAC validation rejection.
 5. **Transactional Atomic Rollback**: Any failure in AAD verification or MAC tag validation instantly triggers state restoration to the pre-transaction snapshot, preventing state corruption and DoS attacks.
 6. **Bounded Replay Rejection**: Message keys are strictly single-use; retransmitted ciphertexts are rejected via bounded key fingerprint tracking.
+7. **Anti-Rollback State Preservation**: Stored session state snapshots cannot be replayed from historical versions or restored with invalid device master keys.
+8. **Deterministic Identity Fingerprinting**: Safety numbers are strictly invariant under peer evaluation order (`SafetyNumber(A, B) == SafetyNumber(B, A)`).
