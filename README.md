@@ -21,6 +21,7 @@ This repository contains the complete technical specifications, cryptographic pr
 - 📜 **Formal Protocol Specification**: [`docs/TRUPLES-RATCHET-SPEC.md`](docs/TRUPLES-RATCHET-SPEC.md)
 - 📐 **Tamarin Formal Verification**: [`formal/truples_ratchet.spthy`](formal/truples_ratchet.spthy) | [`formal/PROOF_RESULTS.md`](formal/PROOF_RESULTS.md) | [`formal/README.md`](formal/README.md)
 - 📊 **Deterministic Cross-Language Test Vectors**: [`vectors/deterministic_vectors.json`](vectors/deterministic_vectors.json)
+- 🦀 **Independent Rust Conformance Engine**: [`implementations/rust/`](implementations/rust/)
 - 🧪 **Open Cryptographic Core & Test Suite**: [`src/crypto/truples-crypto.js`](src/crypto/truples-crypto.js) | [`tests/crypto.test.js`](tests/crypto.test.js)
 
 ### 1.1 Verified Protocol Assurance Matrix
