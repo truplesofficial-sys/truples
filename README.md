@@ -176,6 +176,15 @@ npm test
 | **Media Encryption** | ✅ **Implemented & Verifiable**: Real-time voice/video channels establish direct P2P `DTLS 1.3 / SRTP` connections. |
 | **Zero-Retention Relay** | 📋 **Architectural Policy**: In-memory transit queues (Redis) purge ciphertexts upon recipient acknowledgment (`ACK`). Third-party white-box audit planned for formal certification. |
 
+### 7.1 Explicit Threat Model
+
+| Threat Vector Category | In-Scope (Mitigated by Truples Cryptography) | Out-of-Scope (Environmental Boundary) |
+| :--- | :--- | :--- |
+| **Network & Transport** | ✅ Active MITM, passive packet eavesdropping, TLS termination interception, replay attacks | ❌ Denial-of-Service (DoS/DDoS) against transport sockets |
+| **Relay Infrastructure**| ✅ Malicious or subpoenaed relay servers (Server cannot decrypt E2EE payload) | ❌ Direct database seizure of recipient offline device stores |
+| **Cryptographic State** | ✅ Historical key compromise (Self-healing via subsequent DH Ratchet turns) | ❌ Compromised OS kernel, hardware keyloggers, screen scrapers |
+| **Message Ordering** | ✅ Out-of-order delivery, duplicated packets, ciphertext bit-flipping (128-bit MAC) | ❌ Malicious verified recipient leaking decrypted plaintexts |
+
 ---
 
 ## 8. Technology Stack & Implementation Standards
