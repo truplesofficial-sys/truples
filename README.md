@@ -195,8 +195,8 @@ npm test
 | **Native Mobile** | Android (Java/Kotlin), iOS (Swift/Obj-C), Capacitor | OS Keystore/Keychain, Telecom `ConnectionService`, `CallKit` |
 | **Relay Backend** | Java 17+, Spring Boot, Spring Security | Zero-knowledge WSS routing, session version validation |
 | **Signaling Protocol** | WebSocket (WSS) over TLS 1.3, STOMP framing | Low-latency bi-directional messaging and ICE signaling |
-| **Transient Buffer** | Redis (In-Memory volatile store) | Ephemeral transit buffer with strict Time-To-Live (TTL) |
-| **Persistence Layer** | PostgreSQL (Relational Store) | Session versioning, device key binding, and audit telemetry |
+| **Transient Relay** | In-Memory Ephemeral Buffer | Volatile transit queue with strict TTL zero-retention |
+| **Persistence Layer** | High-Integrity Encrypted Vault | Clustered storage for session state, device binding & audit telemetry |
 | **Real-Time Media** | WebRTC (DTLS 1.2/1.3, SRTP), Coturn STUN/TURN | Direct P2P audio/video streaming (Optimized for 1:1 and small groups) |
 
 ---
