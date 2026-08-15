@@ -1,7 +1,7 @@
 # WebRTC P2P Mesh Architecture & Real-Time Media Protocols
 
 ## 1. Decentralized Media Topology
-Truples utilizes a direct **Peer-to-Peer (P2P) WebRTC Mesh** topology for 1:1 and multi-party group communication, bypassing centralized Media Control Units (MCU) or Selective Forwarding Units (SFU) that represent central surveillance vectors.
+Truples utilizes a direct **Peer-to-Peer (P2P) WebRTC Mesh** topology optimized for 1:1 and private small-group communication, deliberately bypassing centralized Media Control Units (MCU) or Selective Forwarding Units (SFU) to eliminate central surveillance and interception risks.
 
 ```
        [ Client A ] <================ DTLS/SRTP ================> [ Client B ]
