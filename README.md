@@ -3,8 +3,7 @@
 [![Status: Production Live](https://img.shields.io/badge/Status-Production%20Live-emerald.svg)](https://truples.com)
 [![Crypto Tests: 7/7 Passing](https://img.shields.io/badge/Crypto%20Tests-7%2F7%20Passing-brightgreen.svg)](tests/crypto.test.js)
 [![Cipher: AES--256--GCM](https://img.shields.io/badge/Cipher-AES--256--GCM%20(NIST%20SP%20800--38D)-blue.svg)](https://truples.com)
-[![Identity: ECDSA P--384](https://img.shields.io/badge/Identity-ECDSA%20P--384%20(FIPS%20186--4)-indigo.svg)](src/crypto/truples-crypto.js)
-[![Key Exchange: ECDH P--384](https://img.shields.io/badge/Key%20Exchange-ECDH%20P--384%20(RFC%205903)-purple.svg)](https://truples.com)
+[![Auth Key Exchange: ECDH + ECDSA](https://img.shields.io/badge/Key%20Exchange-ECDH%20%2B%20ECDSA%20(P--384)-indigo.svg)](src/crypto/truples-crypto.js)
 [![Forward Secrecy: KDF Chain Ratchet](https://img.shields.io/badge/Forward%20Secrecy-KDF%20Chain%20Ratchet%20(RFC%205869)-teal.svg)](src/crypto/truples-crypto.js)
 [![Media: WebRTC DTLS/SRTP](https://img.shields.io/badge/Media-WebRTC%20DTLS%2FSRTP%20(RFC%203711)-orange.svg)](https://truples.com)
 [![License: Proprietary Specification](https://img.shields.io/badge/License-Proprietary%20Spec-gray.svg)](LICENSE.md)
@@ -13,13 +12,12 @@
 
 ## 1. Executive Summary
 
-**Truples** is an enterprise-grade, end-to-end encrypted (E2EE) communication platform architected around **client-side symmetric KDF chain ratcheting**, **ECDSA asymmetric identity signatures (MITM defense)**, an **ephemeral in-memory relay model (Zero-Retention)**, and **decentralized Peer-to-Peer (P2P) WebRTC media channels**.
+**Truples** is an enterprise-grade, end-to-end encrypted (E2EE) communication platform architected around **client-side symmetric KDF chain ratcheting**, **MITM-resistant Authenticated Key Exchange (ECDH + ECDSA)**, an **ephemeral in-memory relay model (Zero-Retention)**, and **decentralized Peer-to-Peer (P2P) WebRTC media channels**.
 
 This repository contains the complete technical specifications, cryptographic primitives, and a runnable reference implementation of the cryptographic core engine.
 
 - 🌐 **Live Web Application**: [https://truples.com](https://truples.com)
 - 🧪 **Reference Cryptographic Module**: [`src/crypto/truples-crypto.js`](src/crypto/truples-crypto.js)
-- 📜 **Version History**: [CHANGELOG.md](CHANGELOG.md)
 
 ---
 
@@ -31,7 +29,7 @@ Truples implements strict zero-knowledge, client-side encryption. Plaintext mess
 ┌─────────────────────────────────────────────────────────────┐
 │                    Client-Side Core (A)                     │
 │  ┌──────────────────────┐      ┌─────────────────────────┐  │
-│  │ Device Secure Store  │ ───► │ WebCrypto Engine (v2.2) │  │
+│  │ Device Secure Store  │ ───► │ WebCrypto Engine (v2.3) │  │
 │  └──────────────────────┘      └─────────────────────────┘  │
 └─────────────────────────────────────────────────────────────┘
                                │
@@ -53,11 +51,10 @@ Truples implements strict zero-knowledge, client-side encryption. Plaintext mess
 
 ### Cryptographic Standards Inventory:
 - **Symmetric Cipher**: `AES-256-GCM` (NIST SP 800-38D) with 96-bit CSPRNG IV & 128-bit MAC tag.
-- **Identity Authentication (MITM Defense)**: `ECDSA` over NIST P-384 with `SHA-384` (FIPS 186-4).
-- **Asymmetric Key Exchange**: `ECDH` over NIST P-384 / SECP384R1 (RFC 5903) and `RSA-OAEP-4096` (RFC 8017).
+- **Authenticated Key Exchange (MITM Defense)**: `ECDH over NIST P-384` (RFC 5903) wired directly with `ECDSA P-384 / SHA-384` identity signatures (FIPS 186-4).
 - **Key Derivation Function**: `HKDF` with `HMAC-SHA256` (RFC 5869) enforcing dynamic 32-byte CSPRNG salt.
 - **Forward Secrecy**: Client-Side Symmetric KDF Chain Ratchet advancing per-message.
-- **Runtime Compatibility**: Universal W3C WebCrypto API with zero Node `Buffer` dependencies (Vite & Browser native).
+- **Runtime Compatibility**: Universal W3C WebCrypto API with zero Node `Buffer` dependencies (Native Vite & Browser compatible).
 
 ---
 
@@ -66,7 +63,7 @@ Truples implements strict zero-knowledge, client-side encryption. Plaintext mess
 To guarantee strict Forward Secrecy at the client layer, Truples utilizes a symmetric KDF Chain Ratchet:
 
 ```
-                      [ Initial Shared Secret (ECDH P-384) ]
+                  [ Authenticated Shared Secret (ECDH + ECDSA) ]
                                         │
                          HKDF-SHA256 (Dynamic CSPRNG Salt)
                                         │
@@ -149,12 +146,11 @@ npm test
 
 ### Validated Test Vectors (`tests/crypto.test.js`):
 - ✅ `ECDH P-384` ephemeral keypair generation (RFC 5903)
-- ✅ **`ECDSA P-384 / SHA-384` identity signing & anti-tamper verification (FIPS 186-4)**
-- ✅ `HKDF-SHA256` symmetric root and initial chain key derivation with dynamic 32-byte CSPRNG salt
+- ✅ `ECDSA P-384 / SHA-384` identity signing & anti-tamper verification (FIPS 186-4)
+- ✅ **MITM-Resistant Authenticated Key Exchange** verifying ECDSA signature on remote ECDH public key
 - ✅ **Symmetric KDF Chain Ratchet** ensuring distinct message keys per transmission and verifying forward secrecy
 - ✅ `AES-256-GCM` 256-bit encryption & 128-bit MAC validation
 - ✅ Per-message 96-bit CSPRNG IV freshness (No nonce reuse)
-- ✅ 128-bit authentication tag tamper resistance
 - ✅ Multi-pass typed array memory buffer scrubbing
 
 ---
@@ -164,7 +160,7 @@ npm test
 | Security Property | Implementation & Verification Status |
 | :--- | :--- |
 | **Client-Side E2EE** | ✅ **Implemented & Verifiable**: All messages are sealed via `AES-256-GCM` within client sandboxes prior to network transport. |
-| **MITM Identity Authentication**| ✅ **Implemented & Verifiable**: `ECDSA P-384` cryptographic signatures verify sender authenticity. |
+| **Authenticated Key Exchange**| ✅ **Implemented & Verifiable**: `deriveAuthenticatedRootAndChainKeys()` enforces `ECDSA` identity signature validation against MITM spoofing. |
 | **Forward Secrecy** | ✅ **Implemented & Verifiable**: Each message advances a symmetric `HKDF-SHA256` chain ratchet, generating single-use message keys. |
 | **Media Encryption** | ✅ **Implemented & Verifiable**: Real-time voice/video channels establish direct P2P `DTLS 1.3 / SRTP` connections. |
 | **Zero-Retention Relay** | 📋 **Architectural Policy**: In-memory transit queues (Redis) purge ciphertexts upon recipient acknowledgment (`ACK`). Third-party white-box audit planned for formal certification. |

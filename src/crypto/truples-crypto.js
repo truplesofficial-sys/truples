@@ -1,10 +1,10 @@
 /**
- * Truples Cryptographic Core Reference Implementation (v2.2)
+ * Truples Cryptographic Core Reference Implementation (v2.3)
  * 
  * Fully compatible with:
  * - W3C WebCrypto API (Browser & Node.js Universal Runtime, zero external dependencies)
  * - NIST SP 800-38D (AES-GCM-256 with 96-bit CSPRNG IV & 128-bit MAC tag)
- * - FIPS 186-4 (ECDSA over NIST P-384 with SHA-384 for MITM-resistant identity signatures)
+ * - FIPS 186-4 (ECDSA over NIST P-384 with SHA-384 for MITM-resistant authenticated key exchange)
  * - RFC 5903 (ECDH over NIST P-384 curve)
  * - RFC 5869 (HKDF with HMAC-SHA256)
  * - Symmetric KDF Chain Ratchet for strict Per-Message Forward Secrecy
@@ -70,7 +70,7 @@ export class TruplesCryptoCore {
   }
 
   /**
-   * Signs a payload or handshake token using ECDSA P-384 (MITM Defense).
+   * Signs a payload or ephemeral public key using ECDSA P-384 (MITM Defense).
    * @param {string|Uint8Array} data 
    * @param {CryptoKey} privateKey 
    * @returns {Promise<string>} Base64 signature
@@ -158,6 +158,37 @@ export class TruplesCryptoCore {
     );
 
     return { rootKey, chainKey };
+  }
+
+  /**
+   * Executes a MITM-resistant Authenticated Key Exchange (ECDH + ECDSA Identity Verification).
+   * Cryptographically verifies that the remote ephemeral ECDH public key was signed by the remote party's identity key.
+   * @param {CryptoKey} localEcdhPrivateKey 
+   * @param {CryptoKey} remoteEcdhPublicKey 
+   * @param {CryptoKey} remoteEcdsaIdentityPublicKey 
+   * @param {string} remoteSignatureBase64 
+   * @param {Uint8Array} [dynamicSalt] 
+   * @returns {Promise<{ rootKey: CryptoKey, chainKey: CryptoKey }>}
+   */
+  static async deriveAuthenticatedRootAndChainKeys(
+    localEcdhPrivateKey,
+    remoteEcdhPublicKey,
+    remoteEcdsaIdentityPublicKey,
+    remoteSignatureBase64,
+    dynamicSalt
+  ) {
+    const remoteKeyRaw = await cryptoSubtle.exportKey('raw', remoteEcdhPublicKey);
+    const isAuthentic = await this.verifySignature(
+      new Uint8Array(remoteKeyRaw),
+      remoteSignatureBase64,
+      remoteEcdsaIdentityPublicKey
+    );
+
+    if (!isAuthentic) {
+      throw new Error('Cryptographic Handshake Aborted: MITM identity verification failed.');
+    }
+
+    return await this.deriveRootAndChainKeys(localEcdhPrivateKey, remoteEcdhPublicKey, dynamicSalt);
   }
 
   /**
