@@ -87,6 +87,14 @@ To guarantee strict Forward Secrecy at the client layer, Truples utilizes a symm
 2. **Strict Forward Secrecy**: Once a message key is derived, the previous chain state is zeroized. An adversary compromising a current key state cannot calculate past message keys.
 3. **Random Salt Enclave**: Root and initial chain key derivations enforce 32-byte dynamic CSPRNG salt parameters.
 
+### 3.1 Security Invariants (Formal Verification Guarantees):
+- 🛡️ **Invariant 1 (Single-Use Message Keys)**: A `MessageKey` is strictly single-use and destroyed immediately after encryption/decryption.
+- 🛡️ **Invariant 2 (Root Key Invalidation on DH Turn)**: A successful bidirectional DH Ratchet step permanently invalidates the previous `RootKey`.
+- 🛡️ **Invariant 3 (Skipped Keys Boundary)**: Skipped message keys are strictly bounded, isolated in an ephemeral dictionary, and purged after expiry.
+- 🛡️ **Invariant 4 (CSPRNG Nonce Isolation)**: An AES-GCM 96-bit IV is cryptographically unique and never reused under the same key.
+- 🛡️ **Invariant 5 (Post-Compromise Security / Self-Healing)**: An adversary who compromises historical session keys cannot derive future messages once a new DH Ratchet turn occurs.
+- 🛡️ **Invariant 6 (Zero Client-Side Identity Leakage)**: Ephemeral ECDH exchange payload contains zero persistent device or phone identity linkage.
+
 ---
 
 ## 4. WebRTC P2P Media Mesh (Voice & Video)
