@@ -53,5 +53,5 @@ jobs:
           cd implementations/rust
           cargo run
 
-      - name: Execute Full Zero-Fallback Verification Pipeline
-        run: node scripts/verify_all.js
+      - name: Execute Machine-Checked Tamarin Formal Verification (4/4 Security Lemmas)
+        run: tamarin-prover formal/truples_ratchet.spthy --prove

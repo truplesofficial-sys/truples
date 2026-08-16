@@ -54,5 +54,5 @@ jobs:
           cargo test --locked
           cargo run
 
-      - name: Execute Full Zero-Fallback Verification Pipeline
-        run: npm run verify
+      - name: Execute Machine-Checked Tamarin Formal Verification (4/4 Security Lemmas)
+        run: tamarin-prover formal/truples_ratchet.spthy --prove
