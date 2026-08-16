@@ -18,9 +18,9 @@
 This repository contains the complete technical specifications, cryptographic primitives, formal protocol specification, machine-checked Tamarin verification proofs, deterministic cross-language test vectors, and an **independently auditable cryptographic protocol reference implementation** of the cryptographic core engine.
 
 - 🌐 **Live Web Application**: [https://truples.com](https://truples.com)
-- 📜 **Formal Protocol Specification**: [`docs/TRUPLES-RATCHET-SPEC.md`](docs/TRUPLES-RATCHET-SPEC.md)
+- 📜 **Formal Protocol Specification**: [`docs/TRUPLES-RATCHET-SPEC.md`](docs/TRUPLES-RATCHET-SPEC.md) | **v2 Roadmap**: [`docs/TRUPLES-V2-ROADMAP.md`](docs/TRUPLES-V2-ROADMAP.md)
 - 🛡️ **Security Policy & Disclosure**: [`SECURITY.md`](SECURITY.md) | **Threat Model**: [`THREAT_MODEL.md`](THREAT_MODEL.md)
-- 📐 **Tamarin Formal Verification**: [`formal/truples_ratchet.spthy`](formal/truples_ratchet.spthy) | [`formal/PROOF_RESULTS.md`](formal/PROOF_RESULTS.md) | [`formal/README.md`](formal/README.md)
+- 📐 **Tamarin Formal Verification**: [`formal/truples_ratchet.spthy`](formal/truples_ratchet.spthy) | [`formal/PROOF_RESULTS.md`](formal/PROOF_RESULTS.md) | [`formal/CORRESPONDENCE.md`](formal/CORRESPONDENCE.md)
 - 📊 **Deterministic Cross-Language Test Vectors**: [`vectors/deterministic_vectors.json`](vectors/deterministic_vectors.json)
 - 🦀 **Independent Rust Conformance Engine**: [`implementations/rust/`](implementations/rust/)
 - 🧪 **Open Cryptographic Core & Test Suite**: [`src/crypto/truples-crypto.js`](src/crypto/truples-crypto.js) | [`tests/crypto.test.js`](tests/crypto.test.js) | [`tests/adversarial/`](tests/adversarial/) | [`tests/crash/`](tests/crash/)

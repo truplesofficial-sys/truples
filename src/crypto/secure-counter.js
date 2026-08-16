@@ -14,6 +14,9 @@ class SecureCounterInterface {
   setHighestVersion(sessionId, version) {
     throw new Error("setHighestVersion() must be implemented by platform provider");
   }
+  compareAndSetVersion(sessionId, expectedVersion, newVersion) {
+    throw new Error("compareAndSetVersion() must be implemented by platform provider");
+  }
 }
 
 /**
@@ -35,6 +38,21 @@ class InMemorySecureCounter extends SecureCounterInterface {
       throw new Error(`Monotonic violation: Version ${version} < Current ${current}`);
     }
     this.counters.set(sessionId, version);
+  }
+
+  /**
+   * Atomic Compare-And-Set (CAS) for Concurrent Race-Condition Defense
+   */
+  compareAndSetVersion(sessionId, expectedVersion, newVersion) {
+    const current = this.getHighestVersion(sessionId);
+    if (current !== expectedVersion) {
+      return false; // CAS Mismatch: Concurrent mutation detected
+    }
+    if (newVersion < current) {
+      throw new Error(`Monotonic violation: Version ${newVersion} < Current ${current}`);
+    }
+    this.counters.set(sessionId, newVersion);
+    return true; // CAS Success
   }
 }
 
