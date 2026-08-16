@@ -3,7 +3,6 @@
 
 use hmac::{Hmac, Mac};
 use sha2::{Digest, Sha256, Sha512};
-use std::fs;
 use std::path::Path;
 
 type HmacSha256 = Hmac<Sha256>;
