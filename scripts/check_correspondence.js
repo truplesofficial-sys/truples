@@ -47,7 +47,7 @@ function verifyModelImplementationCorrespondence() {
 
   // 2. Verify Invariant Lemmas in Model
   const REQUIRED_LEMMAS = [
-    'Session_Key_Agreement',
+    'Session_Reachability',
     'Directional_Key_Separation',
     'Forward_Secrecy',
     'Post_Compromise_Security'
