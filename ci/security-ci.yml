@@ -62,4 +62,4 @@ jobs:
           cargo run
 
       - name: Execute Machine-Checked Tamarin Formal Verification (4/4 Security Lemmas)
-        run: tamarin-prover formal/truples_ratchet.spthy --prove --heuristic=s
+        run: tamarin-prover formal/truples_ratchet.spthy --prove --heuristic=s --bound=10
