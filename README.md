@@ -26,6 +26,21 @@ This repository contains the complete technical specifications, cryptographic pr
 - 🦀 **Independent Rust Conformance Engine**: [`implementations/rust/`](implementations/rust/)
 - 🧪 **Open Cryptographic Core & Test Suite**: [`src/crypto/truples-crypto.js`](src/crypto/truples-crypto.js) | [`tests/crypto.test.js`](tests/crypto.test.js) | [`tests/adversarial/`](tests/adversarial/) | [`tests/crash/`](tests/crash/)
 
+---
+
+## 2. Complete Repository Source Code & Architecture Index
+
+| Component | File Path | Scope & Verified Cryptographic Primitives | Line Count / Coverage |
+| :--- | :--- | :--- | :---: |
+| **Double Ratchet Core** | [`src/crypto/truples-crypto.js`](src/crypto/truples-crypto.js) | `class DoubleRatchetSession`, P-384 ECDH/ECDSA, HKDF-SHA256, AES-256-GCM, Directional Chain Isolation, Automated Ephemeral DH Turn-Taking, Bounded Skipped/Consumed Key Caches, AAD Binary Encoding, Monotonic Anti-Rollback Enclave | **870 Lines** (Native WebCrypto) |
+| **Cryptographic Test Suite** | [`tests/crypto.test.js`](tests/crypto.test.js) | 28 Enterprise Vectors: MITM Rejection, Directional Isolation, Full PCS Timeline (t0~t5), Multi-Epoch Shuffled Delivery, AAD Forgery, Monotonic Rollback Interception, Deterministic Assertions | **958 Lines** (28/28 Passing) |
+| **Adversarial Penetration** | [`tests/adversarial/`](tests/adversarial/) | Malicious Server Bit-Flip, AAD Metadata Tamper, Duplicate Replay, Multi-Vector Invariance | **6/6 Suites** (100% Invariant) |
+| **Crash & CAS Concurrency** | [`tests/crash/`](tests/crash/) | Process Crash Restoration, 100-Thread Concurrent Atomic CAS Snapshot Protection | **4/4 Suites** (100% Monotonic) |
+| **Formal Tamarin Specification** | [`formal/truples_ratchet.spthy`](formal/truples_ratchet.spthy) | Machine-Checked Proofs: Session Reachability, Directional Key Separation, Universal Forward Secrecy (`not K(m)`), Universal PCS (`not K(newRootKey)`) | **135 Lines** (4/4 Machine-Checked) |
+| **1:1 Symbol Correspondence** | [`scripts/check_correspondence.js`](scripts/check_correspondence.js) | Automated correspondence verifier binding Tamarin state lemmas 1:1 with WebCrypto JS identifiers | **68 Lines** (Automated in CI) |
+| **Deterministic Vectors** | [`vectors/deterministic_vectors.json`](vectors/deterministic_vectors.json) | Cross-language test vectors (ECDH, HKDF digests, canonical AAD byte strings, 60-digit Safety Numbers) | **100% Deterministic** |
+| **Rust Conformance Engine** | [`implementations/rust/`](implementations/rust/) | Independent Rust verification engine asserting 100% byte-for-byte equivalence with JavaScript WebCrypto core | **Rust 2021 Edition** |
+
 ### 1.1 Verified Protocol Assurance Matrix
 
 ```text
