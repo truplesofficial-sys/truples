@@ -30,10 +30,10 @@ jobs:
       - name: Setup Haskell & Tamarin Prover
         run: |
           sudo apt-get update
-          sudo apt-get install -y tamarin-prover graphviz maude || true
+          sudo apt-get install -y tamarin-prover graphviz maude
 
-      - name: Install Node Dependencies
-        run: npm ci || npm install
+      - name: Install Node Dependencies (Strict Clean Install)
+        run: npm ci
 
       - name: Execute Adversarial & Malicious Server Penetration Tests
         run: npm run test:adversarial
@@ -47,7 +47,7 @@ jobs:
       - name: Execute Independent Rust Conformance Suite
         run: |
           cd implementations/rust
-          cargo test --locked || cargo test
+          cargo test --locked
           cargo run
 
       - name: Execute Full Zero-Fallback Verification Pipeline

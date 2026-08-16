@@ -7,8 +7,9 @@
     "test": "node tests/crypto.test.js",
     "test:adversarial": "node tests/adversarial/malicious_server.test.js",
     "test:crash": "node tests/crash/crash_recovery.test.js",
+    "test:combined": "node tests/adversarial/combined_tamper.test.js",
     "verify": "node scripts/verify_all.js",
-    "verify:all": "node tests/crypto.test.js && node tests/adversarial/malicious_server.test.js && node tests/crash/crash_recovery.test.js && node scripts/verify_all.js"
+    "verify:all": "node tests/crypto.test.js && node tests/adversarial/malicious_server.test.js && node tests/adversarial/combined_tamper.test.js && node tests/crash/crash_recovery.test.js && node scripts/verify_all.js"
   },
   "keywords": [
     "e2ee",

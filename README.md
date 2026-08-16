@@ -36,7 +36,7 @@ Header AAD Cryptographic Binding ✓ Implemented (AES-256-GCM authenticated meta
 Out-of-Order & Delayed Delivery  ✓ Implemented (Bounded skipped keys buffer)
 Strict Replay Attack Protection  ✓ Implemented (Bounded replay cache FIFO eviction)
 Encrypted Session Snapshots      ✓ Implemented (Full state + skipped/consumed keys)
-Hardware Monotonic Anti-Rollback ✓ Implemented (Persistent storage enclave counter)
+Monotonic Anti-Rollback Storage  ✓ Implemented (Hardware-backed on Android/iOS; enclave abstraction)
 Persistent TOFU Identity Store   ✓ Implemented (Encrypted device-bound pinning)
 Truples 60-Digit Safety Number   ✓ Implemented (Lexicographical SHA-512^512 fingerprint)
 Deterministic Test Vectors       ✓ Implemented (Cross-language conformance suite)
