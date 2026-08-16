@@ -27,12 +27,12 @@ jobs:
       - name: Setup Rust Toolchain & Cargo
         uses: actions-rust-lang/setup-rust-toolchain@v1
 
-      - name: Setup Haskell & Tamarin Prover
+      - name: Setup Tamarin Prover via Official Linux Binary
         run: |
           sudo apt-get update
           sudo apt-get install -y graphviz maude wget
-          wget https://github.com/tamarin-prover/tamarin-prover/releases/download/1.8.0/tamarin-prover-1.8.0-linux64-ubuntu.tar.gz
-          tar -xzf tamarin-prover-1.8.0-linux64-ubuntu.tar.gz
+          wget -q https://github.com/tamarin-prover/tamarin-prover/releases/download/1.12.0/tamarin-prover-1.12.0-linux64-ubuntu.tar.gz
+          tar -xzf tamarin-prover-1.12.0-linux64-ubuntu.tar.gz
           sudo mv tamarin-prover /usr/local/bin/
           tamarin-prover --version
 

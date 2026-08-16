@@ -23,11 +23,14 @@ jobs:
       - name: Setup Rust Toolchain & Cargo
         uses: actions-rust-lang/setup-rust-toolchain@v1
 
-      - name: Setup Tamarin Prover via Official Homebrew
+      - name: Setup Tamarin Prover via Official Linux Binary
         run: |
-          eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
-          brew install tamarin-prover/tap/tamarin-prover
-          echo "/home/linuxbrew/.linuxbrew/bin" >> $GITHUB_PATH
+          sudo apt-get update
+          sudo apt-get install -y graphviz maude wget
+          wget -q https://github.com/tamarin-prover/tamarin-prover/releases/download/1.12.0/tamarin-prover-1.12.0-linux64-ubuntu.tar.gz
+          tar -xzf tamarin-prover-1.12.0-linux64-ubuntu.tar.gz
+          sudo mv tamarin-prover /usr/local/bin/
+          tamarin-prover --version
 
       - name: Execute 1:1 Model-Implementation Correspondence Check
         run: node scripts/check_correspondence.js
@@ -51,6 +54,4 @@ jobs:
           cargo run
 
       - name: Execute Full Zero-Fallback Verification Pipeline
-        run: |
-          eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
-          node scripts/verify_all.js
+        run: node scripts/verify_all.js
