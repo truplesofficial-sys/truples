@@ -1,0 +1,30 @@
+{
+  "name": "truples-crypto-core",
+  "version": "2.0.0",
+  "description": "Reference Cryptographic Specification & Core Implementation for Truples E2EE Protocol",
+  "main": "src/crypto/truples-crypto.js",
+  "scripts": {
+    "test": "node tests/crypto.test.js",
+    "test:adversarial": "node tests/adversarial/malicious_server.test.js",
+    "test:crash": "node tests/crash/crash_recovery.test.js",
+    "test:combined": "node tests/adversarial/combined_tamper.test.js",
+    "test:concurrent": "node tests/crash/concurrent_snapshot.test.js",
+    "test:negative-pcs": "node tests/adversarial/compromise_recovery_negative.test.js",
+    "test:compromise-e2e": "node tests/adversarial/server_compromise_e2e.test.js",
+    "test:pqxdh": "node tests/pqxdh/pqxdh_handshake.test.js",
+    "test:sesame": "node tests/sesame/multi_device_sesame.test.js",
+    "verify:correspondence": "node scripts/check_correspondence.js",
+    "verify": "node scripts/verify_all.js",
+    "verify:all": "node scripts/check_correspondence.js && node tests/crypto.test.js && node tests/pqxdh/pqxdh_handshake.test.js && node tests/sesame/multi_device_sesame.test.js && node tests/adversarial/compromise_recovery_negative.test.js && node tests/adversarial/server_compromise_e2e.test.js && node tests/adversarial/malicious_server.test.js && node tests/adversarial/combined_tamper.test.js && node tests/crash/crash_recovery.test.js && node tests/crash/concurrent_snapshot.test.js && node scripts/verify_all.js"
+  },
+  "keywords": [
+    "e2ee",
+    "cryptography",
+    "aes-256-gcm",
+    "ecdh",
+    "webrtc",
+    "zero-retention"
+  ],
+  "author": "Truples Systems",
+  "license": "Proprietary"
+}

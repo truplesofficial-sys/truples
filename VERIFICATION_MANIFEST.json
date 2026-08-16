@@ -1,0 +1,57 @@
+{
+  "protocol_name": "Truples Enterprise Double Ratchet & Post-Quantum Protocol Suite",
+  "protocol_version": "2.5.0-FIPS203-SESAME",
+  "generated_at": "2026-08-16T18:40:33.382Z",
+  "commit_sha": "2947f329269dba40478942952bbdda63bf23289d",
+  "tree_sha": "b494b1a6ce01484cb70839b3f936bc0323edcd06",
+  "branch": "main",
+  "environment": {
+    "node_version": "v24.17.0",
+    "platform": "win32",
+    "arch": "x64"
+  },
+  "cryptographic_sha256_fingerprints": {
+    "docs/PROTOCOL_SPEC.md": "b7fdf9ee9dc87181e7c71f7dc7a84e15e8585dc037bff62f0a36fda0143925e1",
+    "docs/TRUPLES-RATCHET-SPEC.md": "8f6001c54be8c7793131b2353c4a998b8509c6ea44f6f1c2d9231389f4f83c27",
+    "docs/05_pqxdh_post_quantum_handshake.md": "7f53a4ae7871a022e9156e59ba202aad8cda6fc1145ab73f997ad3a323b7998a",
+    "docs/06_multi_device_sesame_protocol.md": "3093c98e93e20dcc9dddd3d209bf95c8f6c7de72fe1de8a57ec5153528c90784",
+    "formal/truples_ratchet.spthy": "c13c2d41bf6acf0f4dfb1777d13980596f60cf69de8dfb9a713b47ef32f2863d",
+    "formal/PROOF_RESULTS.md": "58172b4af91f438a2aa1e7348550d2c180de62c11314bf5f0fe8b3e0b0779665",
+    "src/crypto/truples-crypto.js": "b53eab3cfff3796f3fd1714e910ec5660e81cccbe0f1310e8ca534c28dedd4f0",
+    "src/crypto/truples-pqkem.js": "cbb13fd5ced94db515bb838a71eef5a4fea4c9901392ffea6587cce946b9eddd",
+    "src/crypto/truples-pqxdh.js": "afb1f2c43c2f8f128a8c163cd3e423fec4ad54090c4bf4cf8cc5301615a5b828",
+    "src/crypto/truples-sesame.js": "b0ffa5e8f2993db216ada002a94ba542537e5998b069ef5359cc1201bd6111dd",
+    "implementations/rust/src/main.rs": "7b72b6709e872787fd2e309bed7b7a63435cef80b6f4090aab68bacf8a48fd87",
+    "vectors/deterministic_vectors.json": "cf5fdadb91962d740b6fe9b4a7ca7eb72093230ac59b060ede5f383c21bc9875",
+    "scripts/check_correspondence.js": "b4b9a6fdef9b8c6daa92f64f0d2c493f871c2fc90f01c673f675f20163d73cf9",
+    "tests/crypto.test.js": "43441bceedadfe56e94a87d790ae23b853852b6fc6fed37a1fc1918fe9a85808",
+    "tests/pqxdh/pqxdh_handshake.test.js": "6d27672e1a362aa193826c7a62c0745cc39e50d57fd2d3c1a525b73c5dec18ef",
+    "tests/sesame/multi_device_sesame.test.js": "8f7327e1bb934474982048ad34991cc8ad5864d8b7e95a574692d1a6fcaa1365",
+    "tests/adversarial/server_compromise_e2e.test.js": "37212e774ad677489a08e290bab401c1576a0fb02cd2bd5680de761907ed0c57",
+    "tests/adversarial/compromise_recovery_negative.test.js": "fd0f0cfa6a0f626a5d8543da71553daf1178c348f7fd990c75c1645815674c3a",
+    "tests/adversarial/malicious_server.test.js": "a896826da44a87d82f88c5e68d3c5d484d51ad156558e3df94caae36a611921b",
+    "tests/adversarial/combined_tamper.test.js": "83f96ae913459eb36476bb41358b6ea380ab107f4bcbe8aaa71398f59ade3a86",
+    "tests/crash/crash_recovery.test.js": "9adbbe514f333713d4c11ccd1cce8cacdafb224caa11b91b8e6ddac817f6e577",
+    "tests/crash/concurrent_snapshot.test.js": "68c37471b9ad8b6ef8c1bd0f0c420bae0ee47ade7dc84eba53cd8eb924858b33",
+    "tests/fuzzing/state_machine_fuzzer.test.js": "1540db88c7c78a992de206cb3f0518ea5b026544a68fe7d6c754c4a09c2295ce"
+  },
+  "security_verification_matrix": {
+    "1:1 Model-Implementation Correspondence": "PASS (210/210 Soundness Mutations Rejected)",
+    "Signal PQXDH Post-Quantum Key Agreement": "PASS (8/8 Test Vectors Verified)",
+    "Signal Sesame Multi-Device Management": "PASS (8/8 Test Vectors Verified)",
+    "TRP-011 Dual-Assertion PCS Compromise Recovery": "PASS (Positive/Negative Bounds Verified)",
+    "Adversarial Server Compromise & PCS Recovery": "PASS (100-Turn Adaptive Attacker Locked Out)",
+    "1000-Step State-Machine Randomized Fuzzing": "PASS (1000/1000 Operations Invariant Stable)",
+    "Crash Resilience & Temporal Rollback Defense": "PASS (4/4 Scenarios Verified)",
+    "Enterprise Cryptographic Integration Suite": "PASS (28/28 Vectors Verified)",
+    "Independent Rust Conformance Engine": "PASS (100% Byte-for-Byte Interoperability)",
+    "Machine-Checked Tamarin Formal Verification (Bounded Depth = 2)": "PASS (5/5 Security Lemmas Verified)"
+  },
+  "formal_lemmas_verified": [
+    "Session_Reachability",
+    "Directional_Key_Separation",
+    "Forward_Secrecy",
+    "Post_Compromise_Security",
+    "Future_Message_Secrecy_After_Healing"
+  ]
+}

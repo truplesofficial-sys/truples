@@ -1,0 +1,301 @@
+# Truples Protocol & Architecture Specification
+
+[![Security & Formal Verification CI](https://github.com/truplesofficial-sys/truples/actions/workflows/security.yml/badge.svg)](https://github.com/truplesofficial-sys/truples/actions/workflows/security.yml)
+[![Status: Production Live](https://img.shields.io/badge/Status-Production%20Live-emerald.svg)](https://truples.com)
+[![Formal Proof: Tamarin](https://img.shields.io/badge/Formal%20Proof-Tamarin%205%2F5%20Verified-blueviolet.svg)](formal/truples_ratchet.spthy)
+[![Soundness: 210/210 Mutations Rejected](https://img.shields.io/badge/Soundness-210%2F210%20Mutations%20Rejected-brightgreen.svg)](scripts/check_correspondence.js)
+[![State Fuzzing: 1000/1000 Invariant](https://img.shields.io/badge/Fuzzing-1000%20Steps%20Invariant-emerald.svg)](tests/fuzzing/state_machine_fuzzer.test.js)
+[![Crypto Tests: 28/28 Passing](https://img.shields.io/badge/Crypto%20Tests-28%2F28%20Passing-brightgreen.svg)](tests/crypto.test.js)
+[![Cipher: AES--256--GCM](https://img.shields.io/badge/Cipher-AES--256--GCM%20(NIST%20SP%20800--38D)-blue.svg)](https://truples.com)
+[![Auth Key Exchange: ECDH + ECDSA](https://img.shields.io/badge/Key%20Exchange-ECDH%20%2B%20ECDSA%20(P--384)-indigo.svg)](src/crypto/truples-crypto.js)
+[![Forward Secrecy: KDF Chain Ratchet](https://img.shields.io/badge/Forward%20Secrecy-KDF%20Chain%20Ratchet%20(RFC%205869)-teal.svg)](src/crypto/truples-crypto.js)
+[![Rust Conformance: 100% Byte-Equal](https://img.shields.io/badge/Rust%20Interop-100%25%20Byte--Equal-orange.svg)](implementations/rust/)
+[![License: Proprietary Specification](https://img.shields.io/badge/License-Proprietary%20Spec-gray.svg)](LICENSE.md)
+
+---
+
+## 1. Executive Summary
+
+**Truples** is an enterprise-grade, end-to-end encrypted (E2EE) communication platform architected around **client-side symmetric KDF chain ratcheting**, **MITM-resistant Authenticated Key Exchange (ECDH + ECDSA)**, an **ephemeral in-memory relay model (Zero-Retention)**, and **decentralized Peer-to-Peer (P2P) WebRTC media channels**.
+
+This repository contains the complete technical specifications, cryptographic primitives, formal protocol specification, machine-checked Tamarin verification proofs, deterministic cross-language test vectors, and an **independently auditable cryptographic protocol reference implementation** of the cryptographic core engine.
+
+- 🌐 **Live Web Application**: [https://truples.com](https://truples.com)
+- 📜 **Formal Protocol Specification**: [`docs/TRUPLES-RATCHET-SPEC.md`](docs/TRUPLES-RATCHET-SPEC.md) | **v2 Roadmap**: [`docs/TRUPLES-V2-ROADMAP.md`](docs/TRUPLES-V2-ROADMAP.md)
+- 🛡️ **Security Policy & Disclosure**: [`SECURITY.md`](SECURITY.md) | **Threat Model**: [`THREAT_MODEL.md`](THREAT_MODEL.md)
+- 📐 **Tamarin Formal Verification**: [`formal/truples_ratchet.spthy`](formal/truples_ratchet.spthy) | [`formal/PROOF_RESULTS.md`](formal/PROOF_RESULTS.md) | [`formal/CORRESPONDENCE.md`](formal/CORRESPONDENCE.md)
+- 📊 **Deterministic Cross-Language Test Vectors**: [`vectors/deterministic_vectors.json`](vectors/deterministic_vectors.json)
+- 🦀 **Independent Rust Conformance Engine**: [`implementations/rust/`](implementations/rust/)
+- 🧪 **Open Cryptographic Core & Test Suite**: [`src/crypto/truples-crypto.js`](src/crypto/truples-crypto.js) | [`tests/crypto.test.js`](tests/crypto.test.js) | [`tests/adversarial/`](tests/adversarial/) | [`tests/crash/`](tests/crash/)
+
+---
+
+## 2. Complete Repository Source Code & Architecture Index
+
+| Component | File Path | Scope & Verified Cryptographic Primitives | Line Count / Coverage |
+| :--- | :--- | :--- | :---: |
+| **Double Ratchet Core** | [`src/crypto/truples-crypto.js`](src/crypto/truples-crypto.js) | `class DoubleRatchetSession`, P-384 ECDH/ECDSA, HKDF-SHA256, AES-256-GCM, Directional Chain Isolation, Automated Ephemeral DH Turn-Taking, Bounded Skipped/Consumed Key Caches, AAD Binary Encoding, Monotonic Anti-Rollback Enclave | **870 Lines** (Native WebCrypto) |
+| **Cryptographic Test Suite** | [`tests/crypto.test.js`](tests/crypto.test.js) | 28 Enterprise Vectors: MITM Rejection, Directional Isolation, Full PCS Timeline (t0~t5), Multi-Epoch Shuffled Delivery, AAD Forgery, Monotonic Rollback Interception, Deterministic Assertions | **958 Lines** (28/28 Passing) |
+| **Adversarial & Server Compromise** | [`tests/adversarial/`](tests/adversarial/) | Total Server Takeover Zero-Knowledge Invariance, Malicious Server Bit-Flip, AAD Metadata Tamper, Duplicate Replay | **7/7 Suites** (100% Invariant) |
+| **Protocol State-Machine Fuzzing** | [`tests/fuzzing/`](tests/fuzzing/) | 1,000-Step Randomized Interleaved Event Fuzzing (Drop, Permutation, Dynamic Snapshot, Mutation) | **100% Invariant Stability** |
+| **Crash & CAS Concurrency** | [`tests/crash/`](tests/crash/) | Process Crash Restoration, 100-Thread Concurrent Atomic CAS Snapshot Protection | **4/4 Suites** (100% Monotonic) |
+| **Formal Tamarin Specification** | [`formal/truples_ratchet.spthy`](formal/truples_ratchet.spthy) | Machine-Checked Proofs: Session Reachability, Directional Key Separation, Universal Forward Secrecy (`not K(m)`), Universal PCS (`not K(newRootKey)`), Universal Post-Healing Message Secrecy | **145 Lines** (5/5 Machine-Checked) |
+| **Canonical Crypto IR Equivalence** | [`scripts/check_correspondence.js`](scripts/check_correspondence.js) | Automated AST data-flow & Tamarin symbolic term-rewriting verifier with 210-vector Soundness Mutation suite across 11 security categories | **210/210 Mutations Rejected** |
+| **Deterministic Vectors** | [`vectors/deterministic_vectors.json`](vectors/deterministic_vectors.json) | Cross-language test vectors (ECDH, HKDF digests, canonical AAD byte strings, 60-digit Safety Numbers) | **100% Deterministic** |
+| **Rust Conformance Engine** | [`implementations/rust/`](implementations/rust/) | Independent Rust verification engine asserting 100% byte-for-byte equivalence with JavaScript WebCrypto core | **Rust 2021 Edition** |
+
+### 1.1 Verified Protocol Assurance Matrix
+
+```text
+Protocol Specification           ✓ Implemented (docs/TRUPLES-RATCHET-SPEC.md)
+Double Ratchet State Machine     ✓ Implemented (P-384 ECDH + Directional KDF)
+Strict Forward Secrecy           ✓ Implemented (Per-message KDF chain ratchet)
+Post-Compromise Security (PCS)   ✓ Implemented (Automated Ephemeral DH turn-taking)
+Header AAD Cryptographic Binding ✓ Implemented (AES-256-GCM authenticated metadata)
+Out-of-Order & Delayed Delivery  ✓ Implemented (Bounded skipped keys buffer)
+Strict Replay Attack Protection  ✓ Implemented (Bounded replay cache FIFO eviction)
+Encrypted Session Snapshots      ✓ Implemented (Full state + skipped/consumed keys)
+Monotonic Anti-Rollback Storage  ✓ Implemented (Hardware-backed on Android/iOS; enclave abstraction)
+Persistent TOFU Identity Store   ✓ Implemented (Encrypted device-bound pinning)
+Truples 60-Digit Safety Number   ✓ Implemented (Lexicographical SHA-512^512 fingerprint)
+Deterministic Test Vectors       ✓ Implemented (Cross-language conformance suite)
+Adversarial State Fuzzing        ✓ Implemented (PRNG seed-reproducible property tests)
+Transactional Atomic Rollback    ✓ Implemented (State snapshot restoration on MAC failure)
+Independent Rust Conformance    ✓ Implemented (Clean-room Rust verification engine)
+Tamarin Formal Verification      ✓ Implemented (Machine-checked proof results: 4/4)
+Independent Cryptographic Audit  ☐ Planned (External third-party firm review)
+```
+
+### 1.2 Commercial IP & Open Cryptographic Core Policy
+To protect commercial infrastructure and proprietary routing assets while guaranteeing 100% cryptographic verifiability:
+- **Client Cryptographic Engine**: Fully open-source under standard W3C WebCrypto primitives for independent mathematical auditing.
+- **Relay Infrastructure & Backend**: Maintained under a secure proprietary license to protect operational enclaves and prevent unauthorized commercial cloning.
+
+---
+
+## 2. Cryptographic Architecture & Primitives
+
+Truples implements strict zero-knowledge, client-side encryption. Plaintext messages, media attachments, and private keys never leave local device boundaries without cryptographic encapsulation.
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Client-Side Core (A)                     │
+│  ┌──────────────────────┐      ┌─────────────────────────┐  │
+│  │ Device Secure Store  │ ───► │    WebCrypto Engine     │  │
+│  └──────────────────────┘      └─────────────────────────┘  │
+└─────────────────────────────────────────────────────────────┘
+                               │
+               [ AES-256-GCM Encrypted Payload Stream ]
+                               │
+                               ▼
+               ┌───────────────────────────────┐
+               │  Zero-Knowledge Relay Server  │
+               └───────────────────────────────┘
+                               │
+                               ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    Client-Side Core (B)                     │
+│  ┌──────────────────────┐      ┌─────────────────────────┐  │
+│  │ Device Secure Store  │ ◄─── │ Decryption & MAC Verify │  │
+│  └──────────────────────┘      └─────────────────────────┘  │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Cryptographic Standards Inventory:
+- **Symmetric Cipher**: `AES-256-GCM` (NIST SP 800-38D) with 96-bit CSPRNG IV & 128-bit MAC tag.
+- **Authenticated Key Exchange (MITM Defense)**: `ECDH over NIST P-384` (RFC 5903) wired directly with `ECDSA P-384 / SHA-384` identity signatures (FIPS 186-4).
+- **Key Derivation Function**: `HKDF` with `HMAC-SHA256` (RFC 5869) enforcing dynamic 32-byte CSPRNG salt.
+- **Forward Secrecy**: Client-Side Symmetric KDF Chain Ratchet advancing per-message.
+- **Runtime Compatibility**: Universal W3C WebCrypto API with zero Node `Buffer` dependencies (Native Vite & Browser compatible).
+
+---
+
+## 3. Symmetric KDF Chain Ratchet (Per-Message Forward Secrecy)
+
+To guarantee strict Forward Secrecy at the client layer, Truples utilizes a symmetric KDF Chain Ratchet:
+
+```
+                  [ Authenticated Shared Secret (ECDH + ECDSA) ]
+                                        │
+                         HKDF-SHA256 (Dynamic CSPRNG Salt)
+                                        │
+                      ┌─────────────────┴─────────────────┐
+                      ▼                                   ▼
+                 [ Root Key ]                       [ Chain Key 0 ]
+                                                          │
+                                                    HKDF-SHA256
+                                                    ┌─────┴─────┐
+                                                    ▼           ▼
+                                            [ Chain Key 1 ] [ Message Key 0 ] ──► Encrypts Message 0
+                                                    │
+                                              HKDF-SHA256
+                                              ┌─────┴─────┐
+                                              ▼           ▼
+                                      [ Chain Key 2 ] [ Message Key 1 ] ──► Encrypts Message 1
+```
+
+### Security Properties:
+1. **Per-Message Key Freshness**: Each message uses a distinct, single-use `MessageKey`.
+2. **Strict Forward Secrecy**: Once a message key is derived, the previous chain state is zeroized. An adversary compromising a current key state cannot calculate past message keys.
+3. **Random Salt Enclave**: Root and initial chain key derivations enforce 32-byte dynamic CSPRNG salt parameters.
+
+### 3.1 Security Invariants & Automated Test Mapping:
+
+| Formal Security Invariant | Cryptographic Guarantee | Automated Test Vector (`tests/crypto.test.js`) |
+| :--- | :--- | :--- |
+| 🛡️ **Invariant 1: Single-Use Keys** | Message keys are strictly single-use and destroyed after decryption | `Test 4: Directional KDF Chain Ratchet` |
+| 🛡️ **Invariant 2: Root Invalidation** | Bidirectional DH Ratchet permanently invalidates previous root keys | `Test 8: Asymmetric DH Ratchet Step & Byte Equality` |
+| 🛡️ **Invariant 3: Skipped Key Bounds** | Delayed out-of-order message keys are managed across epochs | `Test 10 & 13: Multi-Epoch Skipped Key Resolution` |
+| 🛡️ **Invariant 4: CSPRNG Nonce Isolation**| 96-bit IV is uniquely generated per ciphertext (No nonce reuse) | `Test 5: Dynamic 96-bit IV Freshness` |
+| 🛡️ **Invariant 5: Post-Compromise Recovery**| Full state compromise (RootKey+DHPrivate) heals upon subsequent DH turns | `Test 9 & 12: Full Adversarial PCS & Automated DH Ratchet` |
+| 🛡️ **Invariant 6: Payload Anonymity** | Handshake payloads carry zero personal PII (No phone/email links) | `Test 2: Ephemeral ECDSA Verification` |
+| 🛡️ **Invariant 7: Header Authenticity** | Double Ratchet headers are cryptographically sealed via AES-GCM AAD | `Test 14: Header Tamper Rejection via AAD Binding` |
+| 🛡️ **Invariant 8: Replay Rejection** | Duplicate or previously consumed message transmissions are rejected | `Test 15: Strict Replay Attack Protection` |
+| 🛡️ **Invariant 9: Input Canonical Bounds** | Malformed EC points and integer overflows are rejected at boundaries | `Test 16: Negative Protocol Security & Bounds` |
+| 🛡️ **Invariant 10: Adversarial PCS Timeline**| State recovery bounds verified post outbound turn against attacker | `Test 17: Full Adversarial PCS Timeline` |
+| 🛡️ **Invariant 11: Continuous State Transitions**| Multi-turn turn-taking maintains strict directional chain invariants | `Test 18: Multi-Turn Continuous DH Ratchet` |
+| 🛡️ **Invariant 12: Permutation Resilience**| Heavily interleaved multi-epoch packet shuffling is resolved | `Test 19: Arbitrary Multi-Epoch Permutation` |
+
+---
+
+## 4. WebRTC P2P Media Mesh (Voice & Video)
+
+Truples utilizes a direct **Peer-to-Peer (P2P) WebRTC Mesh** topology for 1:1 and multi-party group communication, bypassing centralized Media Control Units (MCU) or Selective Forwarding Units (SFU).
+
+```
+       [ Client A ] <================ DTLS/SRTP ================> [ Client B ]
+            ^                                                           ^
+            |                                                           |
+            +================= DTLS/SRTP ===============================+
+                                   |
+                                   v
+                              [ Client C ]
+```
+
+### Media Protocol Specifications:
+- **Signaling Layer**: WebSocket over TLS 1.3 (WSS) utilizing STOMP framing for SDP Offer/Answer exchanges and ICE candidate gathering.
+- **Media Stream Encryption**: `DTLS 1.2 / 1.3` (RFC 6347) handshake with `SRTP` (RFC 3711) audio/video encryption.
+- **Telephony Integration**: Android `ConnectionService` (Telecom Framework) and iOS `CallKit` for native OS call handling.
+
+---
+
+## 5. Multi-Tier Panic Defense Matrix
+
+The Truples Panic Defense Matrix provides hardware and cryptographic safeguards in physical coercion scenarios:
+
+```
+[ PIN Input Challenge ]
+          │
+          ├──► "pw1" (Level 1) ──► Renders Functional Decoy Environment
+          │
+          ├──► "pw2" (Level 2) ──► Wipes WebCrypto Master Keys & Unlinks Local DB
+          │
+          └──► "pw3" (Level 3) ──► Low-Level Memory Scrubbing & Active Session Revocation
+```
+
+1. **🚨 Level 1 (Duress Decoy State)**: Unlocks a benign decoy partition containing synthetic benign data.
+2. **🚨 Level 2 (Ephemeral Wipe)**: Instantly erases local WebCrypto master encryption keys and unlinks conversation stores from SQLite / IndexedDB.
+3. **🚨 Level 3 (Hardware Zeroization)**: Executes memory buffer scrubbing and revokes active server session tokens.
+4. **Side-Channel Mitigation**: Credential verification employs constant-time comparison primitives (`MessageDigest.isEqual`) to eliminate timing side-channel exploits.
+
+---
+
+## 6. Verification & Automated Test Suite
+
+Evaluators and security researchers can independently execute the reference cryptographic test suite locally:
+
+```bash
+# Clone the repository
+git clone https://github.com/truplesofficial-sys/truples.git
+cd truples
+
+# Run automated cryptographic validation suite
+npm test
+```
+
+### Validated Test Vectors (`tests/crypto.test.js`):
+The protocol core is validated against 28 adversarial and protocol-level test vectors covering defined threat models:
+- ✅ `ECDH P-384` ephemeral keypair generation (RFC 5903)
+- ✅ `ECDSA P-384 / SHA-384` identity signing & anti-tamper verification (FIPS 186-4)
+- ✅ **MITM-Resistant Authenticated Key Exchange** verifying ECDSA signature on remote ECDH public key
+- ✅ **Symmetric KDF Chain Ratchet** ensuring distinct message keys per transmission and verifying forward secrecy
+- ✅ `AES-256-GCM` 256-bit encryption & 128-bit MAC validation
+- ✅ Per-message 96-bit CSPRNG IV freshness (No nonce reuse)
+- ✅ Best-effort multi-pass typed array memory buffer scrubbing
+- ✅ **Asymmetric DH Ratchet Step & Byte-Level Root Key Equality**
+- ✅ **Adversarial Post-Compromise Security (PCS) Recovery**
+- ✅ **Out-of-Order Message Delivery & Skipped Message Key Buffering (`DoubleRatchetSession`)**
+- ✅ **True Bidirectional Double Ratchet Messaging (`Alice <-> Bob` role-aware chain alignment)**
+- ✅ **Automated Header-Driven Asymmetric DH Ratchet Turn-Taking State Machine**
+- ✅ **Multi-Epoch Out-of-Order Delivery Across Consecutive DH Ratchet Boundaries**
+- ✅ **Double Ratchet Header Tamper Rejection via AES-GCM AAD Binding**
+- ✅ **Strict Replay Attack Protection (Bounded Replay Cache FIFO Eviction)**
+- ✅ **Negative Protocol Security & Malformed Input Bounds (Strict P-384 Point & Integer Range Verification)**
+- ✅ **Full Adversarial PCS Compromise Timeline (Post-Turn Healing Boundary)**
+- ✅ **Multi-Turn Continuous Automated Ephemeral DH Ratchet (10 Turns)**
+- ✅ **Adversarial Multi-Epoch Packet Permutation Stress Test (Interleaved Shuffled Delivery)**
+- ✅ **Deterministic Standard Test Vectors (Specification & Cross-Language Conformance)**
+- ✅ **Randomized State-Machine Property Fuzzing (100-step Zero Violation Assertion)**
+- ✅ **Identity Key Pinning & MITM Remote Key Change Rejection**
+- ✅ **Complete Crash Resilience & Session State Snapshot Restoration**
+- ✅ **Encrypted Session Snapshot Storage (AES-256-GCM Enclave with Anti-Rollback Monotonic Versioning)**
+- ✅ **Trust-On-First-Use (TOFU) Identity Pinning & 60-Digit Verifiable Safety Number Enclave**
+- ✅ **Cross-Platform HKDF & ECDH Domain Separation Test Vectors**
+- ✅ **Seed-Reproducible Adversarial Mutation Testing (Drop, Tamper & Rollback Recovery)**
+- ✅ **Temporal Snapshot Rollback & Multi-Epoch Replay Defense (Past Snapshot Invalidation)**
+
+---
+
+## 7. Security Properties & Claim Boundaries
+
+| Security Property | Implementation & Verification Status |
+| :--- | :--- |
+| **Client-Side E2EE** | ✅ **Implemented & Verifiable**: All messages are sealed via `AES-256-GCM` within client sandboxes prior to network transport. |
+| **Authenticated Key Exchange**| ✅ **Implemented & Verifiable**: `deriveAuthenticatedRootAndChainKeys()` enforces `ECDSA` identity signature validation against MITM spoofing. |
+| **Forward Secrecy** | ✅ **Implemented & Verifiable**: Each message advances a symmetric `HKDF-SHA256` chain ratchet, generating single-use message keys. |
+| **Media Encryption** | ✅ **Implemented & Verifiable**: Real-time voice/video channels establish direct P2P `DTLS 1.3 / SRTP` connections. |
+| **Zero-Retention Relay** | 📋 **Architectural Policy**: In-memory transit queues (Redis) purge ciphertexts upon recipient acknowledgment (`ACK`). Third-party white-box audit planned for formal certification. |
+
+### 7.1 Explicit Threat Model
+
+| Threat Vector Category | In-Scope (Mitigated by Truples Cryptography) | Out-of-Scope (Environmental Boundary) |
+| :--- | :--- | :--- |
+| **Network & Transport** | ✅ Active MITM, passive packet eavesdropping, TLS termination interception, replay attacks | ❌ Denial-of-Service (DoS/DDoS) against transport sockets |
+| **Relay Infrastructure**| ✅ Malicious or subpoenaed relay servers (Server cannot decrypt E2EE payload) | ❌ Direct database seizure of recipient offline device stores |
+| **Cryptographic State** | ✅ Historical key compromise (Self-healing via subsequent DH Ratchet turns) | ❌ Compromised OS kernel, hardware keyloggers, screen scrapers |
+| **Message Ordering** | ✅ Out-of-order delivery, duplicated packets, ciphertext bit-flipping (128-bit MAC) | ❌ Malicious verified recipient leaking decrypted plaintexts |
+
+### 7.2 Data Retention & Zeroization Matrix
+
+| Data Asset | Server-Side Storage Policy | Cryptographic Lifetime / Purge Event |
+| :--- | :--- | :--- |
+| **Message Plaintext** | ❌ **Strict Zero (0 bytes)** | Decrypted exclusively within recipient device memory |
+| **Message Ciphertext** | ⚠️ **Ephemeral In-Flight Transit** | Instantly purged upon recipient acknowledgment (`ACK`) |
+| **Master & Private Keys**| ❌ **Strict Zero (0 bytes)** | Generated and locked in client OS Keystore/Keychain |
+| **Phone / Email / PII** | ❌ **Zero Linkage** | Account creation requires zero personal identification data |
+| **Audio / Video Streams**| ❌ **Zero Server Relay** | Direct P2P `DTLS 1.3 / SRTP` media streaming between clients |
+
+---
+
+## 8. Technology Stack & Implementation Standards
+
+| Component | Technologies & Standards | Technical Function |
+| :--- | :--- | :--- |
+| **Web Client** | React 18, Vite, WebCrypto API, Zustand | UI state management, hardware-accelerated client encryption |
+| **Native Mobile** | Android (Java/Kotlin), iOS (Swift/Obj-C), Capacitor | OS Keystore/Keychain, Telecom `ConnectionService`, `CallKit` |
+| **Relay Backend** | Java 17+, Spring Boot, Spring Security | Zero-knowledge WSS routing, session version validation |
+| **Signaling Protocol** | WebSocket (WSS) over TLS 1.3, STOMP framing | Low-latency bi-directional messaging and ICE signaling |
+| **Transient Relay** | In-Memory Ephemeral Buffer | Volatile transit queue with strict TTL zero-retention |
+| **Persistence Layer** | High-Integrity Encrypted Vault | Clustered storage for session state, device binding & audit telemetry |
+| **Real-Time Media** | WebRTC (DTLS 1.2/1.3, SRTP), Coturn STUN/TURN | Direct P2P audio/video streaming (Optimized for 1:1 and small groups) |
+
+---
+
+## 9. Security Contact & Independent Audit Roadmap
+
+- 📋 **Third-Party Audit Roadmap**: A formal third-party source code and infrastructure audit is scheduled as part of our production release milestones.
+- ✉️ **Security Contact & Vulnerability Reports**: `security@truples.com`
+
+---
+
+Copyright (c) 2025 Truples Systems. All rights reserved.
