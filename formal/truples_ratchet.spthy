@@ -17,7 +17,7 @@ restriction OnlyOneKeyPerActor:
  *
  * Security targets:
  * 1. Session reachability (handshake completes)
- * 2. Directional chain isolation (send != recv)
+ * 2. Directional chain isolation (sendChain != recvChain)
  * 3. Forward secrecy (past messages safe after compromise)
  * 4. Post-compromise security (recovery after DH ratchet)
  */
@@ -38,66 +38,66 @@ rule Handshake_Init:
 // 3. Responder processes handshake and establishes session
 rule Handshake_Resp:
     let
-      sharedDH = pkA_eph^~ephB
-      rootKey  = h(<'rk', sharedDH>)
-      sndChain = h(<'sc', sharedDH>)
-      rcvChain = h(<'rc', sharedDH>)
+      sharedDH  = pkA_eph^~ephB
+      rootKey   = h(<'rk', sharedDH>)
+      sendChain = h(<'sc', sharedDH>)
+      recvChain = h(<'rc', sharedDH>)
     in
     [ !Ltk($B, ~ltkB), !Pk($A, pkA), Fr(~ephB),
       In(<'INIT', $A, pkA_eph, sigA>) ]
   --[
       Eq(verify(sigA, <'INIT', pkA_eph>, pkA), true),
       SessionKey($B, $A, rootKey),
-      DirectionalKeys($B, $A, sndChain, rcvChain)
+      DirectionalKeys($B, $A, sendChain, recvChain)
     ]->
-    [ Session($B, $A, rootKey, sndChain, rcvChain, ~ephB, pkA_eph),
+    [ Session($B, $A, rootKey, sendChain, recvChain, ~ephB, pkA_eph),
       Out(<'RESP', $B, 'g'^~ephB, sign(<'RESP', 'g'^~ephB>, ~ltkB)>) ]
 
 // 4. Initiator finalizes session
 rule Handshake_Finalize:
     let
-      sharedDH = pkB_eph^~ephA
-      rootKey  = h(<'rk', sharedDH>)
-      sndChain = h(<'sc', sharedDH>)
-      rcvChain = h(<'rc', sharedDH>)
+      sharedDH  = pkB_eph^~ephA
+      rootKey   = h(<'rk', sharedDH>)
+      sendChain = h(<'sc', sharedDH>)
+      recvChain = h(<'rc', sharedDH>)
     in
     [ Init_1($A, $B, ~ephA, ~ltkA), !Pk($B, pkB),
       In(<'RESP', $B, pkB_eph, sigB>) ]
   --[
       Eq(verify(sigB, <'RESP', pkB_eph>, pkB), true),
       SessionKey($A, $B, rootKey),
-      DirectionalKeys($A, $B, sndChain, rcvChain)
+      DirectionalKeys($A, $B, sendChain, recvChain)
     ]->
-    [ Session($A, $B, rootKey, sndChain, rcvChain, ~ephA, pkB_eph) ]
+    [ Session($A, $B, rootKey, sendChain, recvChain, ~ephA, pkB_eph) ]
 
 // 5. Send a message (symmetric ratchet step)
 rule Send_Message:
     let
-      msgKey  = h(<'mk', sndChain>)
-      nextSnd = h(<'ns', sndChain>)
+      msgKey        = h(<'mk', sendChain>)
+      nextSendChain = h(<'ns', sendChain>)
     in
-    [ Session($A, $B, rootKey, sndChain, rcvChain, ~lDh, rDh), Fr(~m) ]
+    [ Session($A, $B, rootKey, sendChain, recvChain, ~localDh, remoteDh), Fr(~m) ]
   --[ MsgSent($A, $B, ~m, msgKey), Secret($A, $B, ~m) ]->
-    [ Session($A, $B, rootKey, nextSnd, rcvChain, ~lDh, rDh), Out(senc(~m, msgKey)) ]
+    [ Session($A, $B, rootKey, nextSendChain, recvChain, ~localDh, remoteDh), Out(senc(~m, msgKey)) ]
 
 // 6. Adversary compromises state (linear: no loop-back to Active)
 rule Compromise:
-    [ Session($A, $B, rootKey, sndChain, rcvChain, ~lDh, rDh) ]
+    [ Session($A, $B, rootKey, sendChain, recvChain, ~localDh, remoteDh) ]
   --[ Compromised($A) ]->
-    [ Compromised_Session($A, $B, rootKey, sndChain, rcvChain, ~lDh, rDh),
-      Out(<rootKey, sndChain, rcvChain, ~lDh>) ]
+    [ Compromised_Session($A, $B, rootKey, sendChain, recvChain, ~localDh, remoteDh),
+      Out(<rootKey, sendChain, recvChain, ~localDh>) ]
 
 // 7. DH Ratchet (post-compromise recovery)
 rule DH_Ratchet:
     let
-      newDH    = rDh^~freshDh
-      newRK    = h(<'nrk', rootKey, newDH>)
-      newSnd   = h(<'nsc', newDH>)
-      newRcv   = h(<'nrc', newDH>)
+      newDH          = remoteDh^~freshDh
+      newRootKey     = h(<'nrk', rootKey, newDH>)
+      newSendChain   = h(<'nsc', newDH>)
+      newRecvChain   = h(<'nrc', newDH>)
     in
-    [ Compromised_Session($A, $B, rootKey, sndChain, rcvChain, ~oldDh, rDh), Fr(~freshDh) ]
-  --[ DHRatchet($A, $B, rootKey, newRK), PCSHealed($A, $B, newRK) ]->
-    [ Session($A, $B, newRK, newSnd, newRcv, ~freshDh, rDh), Out('g'^~freshDh) ]
+    [ Compromised_Session($A, $B, rootKey, sendChain, recvChain, ~oldDh, remoteDh), Fr(~freshDh) ]
+  --[ DHRatchet($A, $B, rootKey, newRootKey), PCSHealed($A, $B, newRootKey) ]->
+    [ Session($A, $B, newRootKey, newSendChain, newRecvChain, ~freshDh, remoteDh), Out('g'^~freshDh) ]
 
 // =========================================================================
 // SECURITY LEMMAS
