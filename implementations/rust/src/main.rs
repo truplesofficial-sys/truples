@@ -107,3 +107,25 @@ fn main() {
     println!("🎉 RUST CONFORMANCE ENGINE: 100% BYTE-FOR-BYTE INTEROPERABILITY VERIFIED!");
     println!("========================================================================================");
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_rust_conformance_suite() {
+        let salt = hex::decode("5555555555555555555555555555555555555555555555555555555555555555").unwrap();
+        let secret = hex::decode("333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333").unwrap();
+        let (root, init_chain, resp_chain) = compute_directional_kdf(&salt, &secret);
+
+        assert_eq!(hex::encode(root), "1c75d2f8031957618170ba29e5407456a604c1249896bf80f5bb1324a74f19ad");
+        assert_eq!(hex::encode(init_chain), "62f07800ae176576f818c02e271200cb9884a7e93b9de138e80cb6e80e85abaa");
+        assert_eq!(hex::encode(resp_chain), "1c625c71486b5d4c396595d86bf601d8bf4149192d91077e6161afbfa2a945c7");
+        assert_ne!(init_chain, resp_chain);
+
+        let key_a = hex::decode("04010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101").unwrap();
+        let key_b = hex::decode("04020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202").unwrap();
+        let safety_rust = compute_safety_number(&key_a, &key_b);
+        assert_eq!(safety_rust, "53385 46115 27790 38241 17103 57872 35510 30683 14860 03583 17272 03972");
+    }
+}
