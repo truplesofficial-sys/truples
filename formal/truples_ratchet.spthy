@@ -89,7 +89,7 @@ rule Adversary_Compromise_State:
       CompromisedAt($A, rootKey, sendChain)
     ]->
     [ 
-      Active_Session($A, $B, rootKey, sendChain, recvChain, ~localDh, remoteDh),
+      Compromised_Session($A, $B, rootKey, sendChain, recvChain, ~localDh, remoteDh),
       Out(<rootKey, sendChain, recvChain, ~localDh>) 
     ]
 
@@ -101,7 +101,7 @@ rule Ephemeral_DH_Ratchet_Turn:
       newSendChain = h(<'Truples-DH-Ratchet-Init-To-Resp', newSharedSecret>)
       newRecvChain = h(<'Truples-DH-Ratchet-Resp-To-Init', newSharedSecret>)
     in
-    [ Active_Session($A, $B, rootKey, sendChain, recvChain, ~oldDh, remoteDh), Fr(~freshDh) ]
+    [ Compromised_Session($A, $B, rootKey, sendChain, recvChain, ~oldDh, remoteDh), Fr(~freshDh) ]
   --[
       DHRatchetStep($A, $B, rootKey, newRootKey),
       PCSHealed($A, $B, newRootKey)
