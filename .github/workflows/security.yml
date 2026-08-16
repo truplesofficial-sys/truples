@@ -26,7 +26,11 @@ jobs:
       - name: Setup Haskell & Tamarin Prover
         run: |
           sudo apt-get update
-          sudo apt-get install -y tamarin-prover graphviz maude
+          sudo apt-get install -y graphviz maude wget
+          wget https://github.com/tamarin-prover/tamarin-prover/releases/download/1.8.0/tamarin-prover-1.8.0-linux64-ubuntu.tar.gz
+          tar -xzf tamarin-prover-1.8.0-linux64-ubuntu.tar.gz
+          sudo mv tamarin-prover /usr/local/bin/
+          tamarin-prover --version
 
       - name: Execute 1:1 Model-Implementation Correspondence Check
         run: node scripts/check_correspondence.js
