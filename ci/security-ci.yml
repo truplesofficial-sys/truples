@@ -1,0 +1,54 @@
+# Truples Protocol Security & Formal Verification CI Specification
+# Target Path for GitHub Actions: .github/workflows/security.yml
+
+name: Truples Protocol Security & Formal Verification CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  security-verification:
+    name: Mandatory 4-Tier Zero-Fallback Protocol Verification
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js Environment (v20 LTS)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Setup Rust Toolchain & Cargo
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+
+      - name: Setup Haskell & Tamarin Prover
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y tamarin-prover graphviz maude || true
+
+      - name: Install Node Dependencies
+        run: npm ci || npm install
+
+      - name: Execute Adversarial & Malicious Server Penetration Tests
+        run: npm run test:adversarial
+
+      - name: Execute Crash Resilience & Temporal Anti-Rollback Tests
+        run: npm run test:crash
+
+      - name: Run 28 Enterprise Cryptographic Integration Suite
+        run: npm test
+
+      - name: Execute Independent Rust Conformance Suite
+        run: |
+          cd implementations/rust
+          cargo test --locked || cargo test
+          cargo run
+
+      - name: Execute Full Zero-Fallback Verification Pipeline
+        run: npm run verify

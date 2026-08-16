@@ -5,7 +5,10 @@
   "main": "src/crypto/truples-crypto.js",
   "scripts": {
     "test": "node tests/crypto.test.js",
-    "verify": "node scripts/verify_all.js"
+    "test:adversarial": "node tests/adversarial/malicious_server.test.js",
+    "test:crash": "node tests/crash/crash_recovery.test.js",
+    "verify": "node scripts/verify_all.js",
+    "verify:all": "node tests/crypto.test.js && node tests/adversarial/malicious_server.test.js && node tests/crash/crash_recovery.test.js && node scripts/verify_all.js"
   },
   "keywords": [
     "e2ee",
