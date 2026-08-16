@@ -22,6 +22,8 @@ jobs:
 
       - name: Setup Rust Toolchain & Cargo
         uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          cache-workspaces: implementations/rust
 
       - name: Setup Tamarin Prover & Compatible Maude 3.5.1
         run: |
@@ -56,9 +58,8 @@ jobs:
         run: node tests/crypto.test.js
 
       - name: Execute Independent Rust Conformance Suite
-        run: |
-          cd implementations/rust
-          cargo run
+        working-directory: implementations/rust
+        run: cargo run
 
       - name: Execute Machine-Checked Tamarin Formal Verification (4/4 Security Lemmas)
         run: tamarin-prover formal/truples_ratchet.spthy --prove --heuristic=s --bound=10
