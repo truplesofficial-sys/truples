@@ -108,13 +108,11 @@ async function runStrictSecurityVerification() {
   }
 
   // =========================================================================
-  // STAGE 3: Machine-Checked Tamarin Prover Formal Verification
+  // STAGE 3: Machine-Checked Tamarin Prover Formal Verification (ZERO FALLBACK)
   // =========================================================================
   console.log('📦 [STAGE 3/4] Executing Tamarin Prover Formal Verification Engine...');
   const formalModelPath = path.join(__dirname, '../formal/truples_ratchet.spthy');
-  const formalProofPath = path.join(__dirname, '../formal/PROOF_RESULTS.md');
   assert(fs.existsSync(formalModelPath), 'truples_ratchet.spthy must exist');
-  assert(fs.existsSync(formalProofPath), 'PROOF_RESULTS.md must exist');
 
   const REQUIRED_LEMMAS = [
     'Session_Key_Agreement',
@@ -123,39 +121,27 @@ async function runStrictSecurityVerification() {
     'Post_Compromise_Security'
   ];
 
-  // Verify Model Lemma Declarations in .spthy specification
+  // 1. Verify Model Lemma Declarations in .spthy specification
   const modelContent = fs.readFileSync(formalModelPath, 'utf8');
   for (const lemma of REQUIRED_LEMMAS) {
     assert(modelContent.includes(`lemma ${lemma}:`), `Missing required formal lemma declaration: ${lemma}`);
   }
 
-  // Execute Tamarin Prover CLI or Verify Machine Proof Signature Trace
+  // 2. Strict Live Tamarin Prover Execution (Zero Fallback: Failure/Absence/Timeout = EXIT 1)
   try {
-    let tamarinPassed = false;
-    try {
-      const tamarinCliOutput = execSync('tamarin-prover formal/truples_ratchet.spthy --prove', {
-        encoding: 'utf8',
-        stdio: ['pipe', 'pipe', 'ignore'],
-        timeout: 120000
-      });
-      for (const lemma of REQUIRED_LEMMAS) {
-        assert(tamarinCliOutput.includes(`${lemma} (all-traces): verified`), `Live Tamarin failed to verify: ${lemma}`);
-      }
-      tamarinPassed = true;
-      console.log('   ⚡ Live Tamarin Prover CLI Execution: 4/4 Lemmas Verified.');
-    } catch (cliErr) {
-      // If tamarin-prover CLI is not present in local Node environment, strictly verify signed proof trace artifact
-      const proofContent = fs.readFileSync(formalProofPath, 'utf8');
-      assert(proofContent.includes('Session_Key_Agreement (all-traces): verified (8 steps)'), 'Unverified Session_Key_Agreement trace');
-      assert(proofContent.includes('Directional_Key_Separation (all-traces): verified (4 steps)'), 'Unverified Directional_Key_Separation trace');
-      assert(proofContent.includes('Forward_Secrecy (all-traces): verified (12 steps)'), 'Unverified Forward_Secrecy trace');
-      assert(proofContent.includes('Post_Compromise_Security (all-traces): verified (14 steps)'), 'Unverified Post_Compromise_Security trace');
-      tamarinPassed = true;
+    const tamarinCliOutput = execSync('tamarin-prover formal/truples_ratchet.spthy --prove', {
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+      timeout: 120000
+    });
+    for (const lemma of REQUIRED_LEMMAS) {
+      assert(tamarinCliOutput.includes(`${lemma} (all-traces): verified`), `Live Tamarin failed to verify lemma: ${lemma}`);
     }
-    assert(tamarinPassed, 'Tamarin formal verification validation failed');
-    console.log('   ✅ STAGE 3 PASSED: 4/4 Formal Security Lemmas Verified (Machine-Checked).\n');
+    console.log('   ⚡ Live Tamarin Prover CLI Execution: 4/4 Lemmas Verified.');
+    console.log('   ✅ STAGE 3 PASSED: 4/4 Formal Security Lemmas Machine-Checked via Live Tamarin.\n');
   } catch (err) {
-    console.error('\n❌ STAGE 3 FAILED: Tamarin formal verification validation failed:', err.message);
+    console.error('\n❌ STAGE 3 FAILED: Tamarin Prover live execution failed. Zero fallback permitted.');
+    console.error(err.stderr || err.message);
     process.exit(1);
   }
 

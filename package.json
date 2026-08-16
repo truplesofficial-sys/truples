@@ -5,8 +5,7 @@
   "main": "src/crypto/truples-crypto.js",
   "scripts": {
     "test": "node tests/crypto.test.js",
-    "verify": "node scripts/verify_all.js",
-    "verify:formal": "node scripts/verify_all.js --strict-formal"
+    "verify": "node scripts/verify_all.js"
   },
   "keywords": [
     "e2ee",
