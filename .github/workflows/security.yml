@@ -62,4 +62,8 @@ jobs:
         run: cargo run
 
       - name: Execute Machine-Checked Tamarin Formal Verification (4/4 Security Lemmas)
-        run: tamarin-prover formal/truples_ratchet.spthy --prove --heuristic=s --bound=10
+        run: |
+          tamarin-prover formal/truples_ratchet.spthy --prove=Session_Reachability
+          tamarin-prover formal/truples_ratchet.spthy --prove=Directional_Key_Separation
+          tamarin-prover formal/truples_ratchet.spthy --prove=Forward_Secrecy
+          tamarin-prover formal/truples_ratchet.spthy --prove=Post_Compromise_Security
