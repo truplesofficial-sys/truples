@@ -134,7 +134,7 @@ lemma Post_Compromise_Security:
         StateCompromised(A) @ #i &
         DHRatchetStep(A, B, rk_old, rk_new) @ #j &
         PCSHealed(A, B, rk_new) @ #k &
-        #i < #j & #j <= #k
+        #i < #j & (#j < #k | #j = #k)
         ==> not (Ex #l. K(rk_new) @ #l)"
 
 end
