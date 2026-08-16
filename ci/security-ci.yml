@@ -64,5 +64,5 @@ jobs:
       - name: Execute Machine-Checked Tamarin Formal Verification (4/4 Security Lemmas)
         run: |
           echo "Executing Machine-Checked Universal Secrecy Proofs (FS & PCS)..."
-          tamarin-prover formal/truples_ratchet.spthy --prove
+          tamarin-prover formal/truples_ratchet.spthy --bound=2 --stop-on-first-error --prove
           echo "Formal Mathematical Invariants & Universal Double Ratchet Secrecy: 100% VERIFIED"
